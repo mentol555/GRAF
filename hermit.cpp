@@ -201,14 +201,17 @@ int main() {
     while (!glfwWindowShouldClose(window)) {
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        glUseProgram(shader_programme1);
-        glBindVertexArray(vao);
-        glDrawArrays(GL_LINE_STRIP, 0, N);
-
+        // pontok
         glUseProgram(shader_programme2);
         glBindVertexArray(pointsvao);
         glDrawArrays(GL_POINTS, 0, 4);
 
+        // hermite
+        glUseProgram(shader_programme1);
+        glBindVertexArray(vao);
+        glDrawArrays(GL_LINE_STRIP, 0, N);
+        
+        // osszekotes
         glUseProgram(shader_programme3);
         glBindVertexArray(pointsvao);
         glDrawArrays(GL_LINE_STRIP, 0, 4);
