@@ -22,6 +22,7 @@
 #include <iostream>
 #define _USE_MATH_DEFINES
 #include <math.h>
+#include "gl_utils.h"
 #define GL_LOG_FILE "gl.log"
 
 using namespace std;
@@ -46,7 +47,7 @@ int main() {
         0.5f, -0.5f, 0.5f,  // 6
     };
     GLfloat face1_colours[] = { 1.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0, 1.0, 0.0 };
-    
+
     GLfloat face2[] = {
         0.5f, -0.5f, 0.5f,  // 1 (6 elsobol)
         0.5f,  0.5f, 0.5f,  // 2 (4 elsobol)
@@ -102,8 +103,19 @@ int main() {
     };
     GLfloat face6_colours[] = { 0.0, 0.5, 0.0, 0.0, 0.5, 0.0, 0.0, 0.5, 0.0, 0.0, 0.5, 0.0, 0.0, 0.5, 0.0, 0.0, 0.5, 0.0 };
 
+    // padlo
+    GLfloat floor_points[] = {
+        -1.0f, -1.0f, 1.0f,  // 1
+        -1.0f, -1.0f, -1.0f,  // 2
+        1.0f,  -1.0f, 1.0f,  // 3
+       -1.0f, -1.0f, -1.0f,  // 4
+        1.0f, -1.0f, -1.0f,  // 4
+        1.0f,  -1.0f, 1.0f,  // 3
+    };
+    GLfloat floor_color[] = { 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8 };
+
     //GLfloat rgbcolours[] = { 1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f };
-    
+
 
     GLuint face1_points_vbo;
     glGenBuffers(1, &face1_points_vbo);
@@ -165,6 +177,17 @@ int main() {
     glBindBuffer(GL_ARRAY_BUFFER, face6_colour_vbo);
     glBufferData(GL_ARRAY_BUFFER, 18 * sizeof(GLfloat), face6_colours, GL_STATIC_DRAW);
 
+
+    GLuint floor_points_vbo;
+    glGenBuffers(1, &floor_points_vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, floor_points_vbo);
+    glBufferData(GL_ARRAY_BUFFER, 18 * sizeof(GLfloat), floor_points, GL_STATIC_DRAW);
+
+    GLuint floor_color_vbo;
+    glGenBuffers(1, &floor_color_vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, floor_color_vbo);
+    glBufferData(GL_ARRAY_BUFFER, 18 * sizeof(GLfloat), floor_color, GL_STATIC_DRAW);
+
     GLuint face1_vao;
     glGenVertexArrays(1, &face1_vao);
     glBindVertexArray(face1_vao);
@@ -225,6 +248,16 @@ int main() {
     glEnableVertexAttribArray(0);
     glEnableVertexAttribArray(1);
 
+    GLuint floor_vao;
+    glGenVertexArrays(1, &floor_vao);
+    glBindVertexArray(floor_vao);
+    glBindBuffer(GL_ARRAY_BUFFER, floor_points_vbo);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, NULL);
+    glBindBuffer(GL_ARRAY_BUFFER, floor_color_vbo);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, NULL);
+    glEnableVertexAttribArray(0);
+    glEnableVertexAttribArray(1);
+
     /*------------------------------create shaders--------------------------------*/
     char vertex_shader[1024 * 256];
     char fragment_shader[1024 * 256];
@@ -236,39 +269,29 @@ int main() {
     glShaderSource(vs, 1, &p, NULL);
     glCompileShader(vs);
 
-    // check for compile errors
-    int params = -1;
-    glGetShaderiv(vs, GL_COMPILE_STATUS, &params);
-    if (GL_TRUE != params) {
-        fprintf(stderr, "ERROR: GL shader index %i did not compile\n", vs);
-        print_shader_info_log(vs);
-        return 1; // or exit or something
-    }
-
     GLuint fs = glCreateShader(GL_FRAGMENT_SHADER);
     p = (const GLchar*)fragment_shader;
     glShaderSource(fs, 1, &p, NULL);
     glCompileShader(fs);
-
-    // check for compile errors
-    glGetShaderiv(fs, GL_COMPILE_STATUS, &params);
-    if (GL_TRUE != params) {
-        fprintf(stderr, "ERROR: GL shader index %i did not compile\n", fs);
-        print_shader_info_log(fs);
-        return 1; // or exit or something
-    }
 
     GLuint shader_programme = glCreateProgram();
     glAttachShader(shader_programme, fs);
     glAttachShader(shader_programme, vs);
     glLinkProgram(shader_programme);
 
-    glGetProgramiv(shader_programme, GL_LINK_STATUS, &params);
-    if (GL_TRUE != params) {
-        fprintf(stderr, "ERROR: could not link shader programme GL index %i\n", shader_programme);
-        print_programme_info_log(shader_programme);
-        return false;
-    }
+    // vertex shader 2
+    char vertex_shader2[1024 * 256];
+    parse_file_into_str("vs2.glsl", vertex_shader2, 1024 * 256);
+
+    GLuint vs2 = glCreateShader(GL_VERTEX_SHADER);
+    const GLchar* p2 = (const GLchar*)vertex_shader2;
+    glShaderSource(vs2, 1, &p2, NULL);
+    glCompileShader(vs2);
+
+    GLuint shader_programme2 = glCreateProgram();
+    glAttachShader(shader_programme2, fs);
+    glAttachShader(shader_programme2, vs2);
+    glLinkProgram(shader_programme2);
 
     /*--------------------------create camera matrices----------------------------*/
     /* create PROJECTION MATRIX */
@@ -333,7 +356,6 @@ int main() {
     // model uniform matrixa
     glUniformMatrix4fv(moveMatrix_location, 1, GL_FALSE, model.m);
 
-    glUseProgram(shader_programme);
 
     /*------------------------------rendering loop--------------------------------*/
     /* some rendering defaults */
@@ -341,7 +363,7 @@ int main() {
     //glEnable(GL_CULL_FACE); // cull face
     //glCullFace(GL_BACK);    // cull back face
     //glFrontFace(GL_CW);     // GL_CCW for counter clock-wise
-    
+
     // engedelyezi a melyseg ellenorzeset 
     glEnable(GL_DEPTH_TEST);
 
@@ -388,7 +410,15 @@ int main() {
         glDrawArrays(GL_TRIANGLES, 0, 6);
 
         // ---------
+        // padlo 
+        glUseProgram(shader_programme2);
+        glBindVertexArray(floor_vao);
+        glDrawArrays(GL_TRIANGLES, 0, 6);
 
+        glUseProgram(shader_programme);
+
+        // ---------
+       
         // update other events like input handling
         glfwPollEvents();
 
@@ -446,6 +476,8 @@ int main() {
         // forgas modellje
         model = rotate_y_deg(identity_mat4(), glfwGetTime() * 100);
         glUniformMatrix4fv(model_location, 1, GL_FALSE, model.m);
+
+        
 
         if (GLFW_PRESS == glfwGetKey(g_window, GLFW_KEY_ESCAPE)) { glfwSetWindowShouldClose(g_window, 1); }
         // put the stuff we've been drawing onto the display
