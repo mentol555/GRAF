@@ -28,8 +28,8 @@
 using namespace std;
 
 // keep track of window size for things like the viewport and the mouse cursor
-int g_gl_width = 640;
-int g_gl_height = 640;
+int g_gl_width = 960;
+int g_gl_height = 960;
 GLFWwindow* g_window = NULL;
 
 int main() {
@@ -105,15 +105,26 @@ int main() {
 
     // padlo
     GLfloat floor_points[] = {
-        -1.0f, -1.0f, 1.0f,  // 1
-        -1.0f, -1.0f, -1.0f,  // 2
-        1.0f,  -1.0f, 1.0f,  // 3
-       -1.0f, -1.0f, -1.0f,  // 4
-        1.0f, -1.0f, -1.0f,  // 4
-        1.0f,  -1.0f, 1.0f,  // 3
+        -1.0f, -1.5f, 1.0f,  // 1
+        -1.0f, -1.5f, -1.0f,  // 2
+        1.0f,  -1.5f, 1.0f,  // 3
+       -1.0f, -1.5f, -1.0f,  // 4
+        1.0f, -1.5f, -1.0f,  // 4
+        1.0f,  -1.5f, 1.0f,  // 3
     };
     GLfloat floor_color[] = { 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8 };
 
+
+    // felso negyzet
+    GLfloat top_square[] = {
+       -0.2f,  0.6f, 0.0f, // 1
+       -0.2f, 1.0f, 0.0f,   // 2
+        0.2f, 0.6f, 0.0f,  // 3
+        -0.2f, 1.0f, 0.0f,  // 4
+        0.2f,  1.0f, 0.0f,  // 5
+        0.2f, 0.6f, 0.0f,  // 6
+    };
+    GLfloat top_square_color[] = { 0.0, 1.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0, 1.0 };
     //GLfloat rgbcolours[] = { 1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f };
 
 
@@ -177,6 +188,7 @@ int main() {
     glBindBuffer(GL_ARRAY_BUFFER, face6_colour_vbo);
     glBufferData(GL_ARRAY_BUFFER, 18 * sizeof(GLfloat), face6_colours, GL_STATIC_DRAW);
 
+    // FLOOR VBOS
 
     GLuint floor_points_vbo;
     glGenBuffers(1, &floor_points_vbo);
@@ -187,6 +199,20 @@ int main() {
     glGenBuffers(1, &floor_color_vbo);
     glBindBuffer(GL_ARRAY_BUFFER, floor_color_vbo);
     glBufferData(GL_ARRAY_BUFFER, 18 * sizeof(GLfloat), floor_color, GL_STATIC_DRAW);
+
+    // TOP SQUARE VBOS
+
+    GLuint top_square_points_vbo;
+    glGenBuffers(1, &top_square_points_vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, top_square_points_vbo);
+    glBufferData(GL_ARRAY_BUFFER, 18 * sizeof(GLfloat), top_square, GL_STATIC_DRAW);
+
+    GLuint top_square_color_vbo;
+    glGenBuffers(1, &top_square_color_vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, top_square_color_vbo);
+    glBufferData(GL_ARRAY_BUFFER, 18 * sizeof(GLfloat), top_square_color, GL_STATIC_DRAW);
+
+    // CUBE VAOS
 
     GLuint face1_vao;
     glGenVertexArrays(1, &face1_vao);
@@ -248,12 +274,26 @@ int main() {
     glEnableVertexAttribArray(0);
     glEnableVertexAttribArray(1);
 
+    // FLOOR VAO
+
     GLuint floor_vao;
     glGenVertexArrays(1, &floor_vao);
     glBindVertexArray(floor_vao);
     glBindBuffer(GL_ARRAY_BUFFER, floor_points_vbo);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, NULL);
     glBindBuffer(GL_ARRAY_BUFFER, floor_color_vbo);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, NULL);
+    glEnableVertexAttribArray(0);
+    glEnableVertexAttribArray(1);
+
+    // TOP SQUARE VAO
+
+    GLuint top_square_vao;
+    glGenVertexArrays(1, &top_square_vao);
+    glBindVertexArray(top_square_vao);
+    glBindBuffer(GL_ARRAY_BUFFER, top_square_points_vbo);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, NULL);
+    glBindBuffer(GL_ARRAY_BUFFER, top_square_color_vbo);
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, NULL);
     glEnableVertexAttribArray(0);
     glEnableVertexAttribArray(1);
@@ -280,18 +320,46 @@ int main() {
     glLinkProgram(shader_programme);
 
     // vertex shader 2
-    char vertex_shader2[1024 * 256];
-    parse_file_into_str("vs2.glsl", vertex_shader2, 1024 * 256);
+    const char* vertex_shader2 =
+        "#version 410\n"
+        "layout(location = 0) in vec3 vertex_position;"
+        "layout(location = 1) in vec3 vertex_colour;"
+        "uniform mat4 view, proj;"
+        "out vec3 colour;"
+        "void main () {"
+        " 	colour = vertex_colour;"
+        "gl_Position =  proj * view * vec4 (vertex_position, 1.0);"
+        "}";
 
-    GLuint vs2 = glCreateShader(GL_VERTEX_SHADER);
-    const GLchar* p2 = (const GLchar*)vertex_shader2;
-    glShaderSource(vs2, 1, &p2, NULL);
-    glCompileShader(vs2);
+    // vertex shader 3
+    const char* vertex_shader3 =
+        "#version 410\n"
+        "layout(location = 0) in vec3 vertex_position;"
+        "layout(location = 1) in vec3 vertex_colour;"
+        "uniform mat4 view, proj, model, moveMatrix;"
+        "out vec3 colour;"
+        "void main () {"
+        " 	colour = vertex_colour;"
+        "gl_Position = proj * view * model * moveMatrix * vec4 (vertex_position, 1.0);"
+        "}";
+
+    GLuint vert_shader2 = glCreateShader(GL_VERTEX_SHADER);
+    glShaderSource(vert_shader2, 1, &vertex_shader2, NULL);
+    glCompileShader(vert_shader2);
 
     GLuint shader_programme2 = glCreateProgram();
     glAttachShader(shader_programme2, fs);
-    glAttachShader(shader_programme2, vs2);
+    glAttachShader(shader_programme2, vert_shader2);
     glLinkProgram(shader_programme2);
+
+    GLuint vert_shader3 = glCreateShader(GL_VERTEX_SHADER);
+    glShaderSource(vert_shader3, 1, &vertex_shader3, NULL);
+    glCompileShader(vert_shader3);
+
+    GLuint shader_programme3 = glCreateProgram();
+    glAttachShader(shader_programme3, fs);
+    glAttachShader(shader_programme3, vert_shader3);
+    glLinkProgram(shader_programme3);
 
     /*--------------------------create camera matrices----------------------------*/
     /* create PROJECTION MATRIX */
@@ -311,7 +379,7 @@ int main() {
     /* create VIEW MATRIX */
     float cam_speed = 1.0f;                 // 1 unit per second
     float cam_yaw_speed = 10.0f;                // 10 degrees per second
-    float cam_pos[] = { 0.0f, 0.0f, 2.0f }; // don't start at zero, or we will be too close
+    float cam_pos[] = { 0.0f, 0.0f, 4.0f }; // don't start at zero, or we will be too close
     float cam_yaw = 0.0f;                 // y-rotation in degrees
     // a kamera mozgasanak ellentetet fogjuk csinalni a targyal, igy azt az erzetet keltve hogy mi mozgunk
     mat4 T = translate(identity_mat4(), vec3(-cam_pos[0], -cam_pos[1], -cam_pos[2]));
@@ -322,15 +390,41 @@ int main() {
     mat4 model = rotate_y_deg(identity_mat4(), glfwGetTime());
 
     /* get location numbers of matrices in shader programme */
+
     GLint view_mat_location = glGetUniformLocation(shader_programme, "view");
     GLint proj_mat_location = glGetUniformLocation(shader_programme, "proj");
+    /* view es proj kell mindegyik kulonallo objektumnak! */
+    GLint view_mat_location2 = glGetUniformLocation(shader_programme2, "view");
+    GLint proj_mat_location2 = glGetUniformLocation(shader_programme2, "proj");
+
+    GLint view_mat_location3 = glGetUniformLocation(shader_programme3, "view");
+    GLint proj_mat_location3 = glGetUniformLocation(shader_programme3, "proj");
+
+
     /* use program (make current in state machine) and set default matrix values*/
     glUseProgram(shader_programme);
     glUniformMatrix4fv(view_mat_location, 1, GL_FALSE, view_mat.m);
     glUniformMatrix4fv(proj_mat_location, 1, GL_FALSE, proj_mat);
 
+    glUseProgram(shader_programme2);
+    glUniformMatrix4fv(view_mat_location2, 1, GL_FALSE, view_mat.m);
+    glUniformMatrix4fv(proj_mat_location2, 1, GL_FALSE, proj_mat);
+
+    glUseProgram(shader_programme3);
+    glUniformMatrix4fv(view_mat_location3, 1, GL_FALSE, view_mat.m);
+    glUniformMatrix4fv(proj_mat_location3, 1, GL_FALSE, proj_mat);
+
+
+    glUseProgram(shader_programme);
+
+    // moveMatrix -> mozgas fel-le
+    // model -> rotate object
+
     GLint moveMatrix_location = glGetUniformLocation(shader_programme, "moveMatrix");
     GLint model_location = glGetUniformLocation(shader_programme, "model");
+
+    GLint moveMatrix_location3 = glGetUniformLocation(shader_programme3, "moveMatrix");
+    GLint model_location3 = glGetUniformLocation(shader_programme3, "model");
 
 
     GLfloat moveMatrix[] = {
@@ -354,9 +448,15 @@ int main() {
 
     glUniformMatrix4fv(moveMatrix_location, 1, GL_FALSE, moveMatrix);
     // model uniform matrixa
-    glUniformMatrix4fv(moveMatrix_location, 1, GL_FALSE, model.m);
+    glUniformMatrix4fv(model_location, 1, GL_FALSE, model.m);
+
+    glUseProgram(shader_programme3);
+    glUniformMatrix4fv(moveMatrix_location3, 1, GL_FALSE, moveMatrix);
+    // model uniform matrixa
+    glUniformMatrix4fv(model_location3, 1, GL_FALSE, model.m);
 
 
+    glUseProgram(shader_programme);
     /*------------------------------rendering loop--------------------------------*/
     /* some rendering defaults */
     // generalja le a hatuljat is!
@@ -415,12 +515,18 @@ int main() {
         glBindVertexArray(floor_vao);
         glDrawArrays(GL_TRIANGLES, 0, 6);
 
-        glUseProgram(shader_programme);
+        // ---------
+        // felso negyzet 
+        glUseProgram(shader_programme3);
+        glBindVertexArray(top_square_vao);
+        glDrawArrays(GL_TRIANGLES, 0, 6);
 
         // ---------
-       
+        
         // update other events like input handling
         glfwPollEvents();
+
+        glUseProgram(shader_programme);
 
         moveMatrix[13] = elapsed_seconds * speed + last_position;
         last_position = moveMatrix[13];
@@ -468,8 +574,13 @@ int main() {
             mat4 R = rotate_y_deg(identity_mat4(), -cam_yaw);     //
             mat4 view_mat = R * T;
             glUniformMatrix4fv(view_mat_location, 1, GL_FALSE, view_mat.m);
+            glUseProgram(shader_programme2);
+            glUniformMatrix4fv(view_mat_location2, 1, GL_FALSE, view_mat.m);
+            glUseProgram(shader_programme3);
+            glUniformMatrix4fv(view_mat_location3, 1, GL_FALSE, view_mat.m);
 
         }
+        glUseProgram(shader_programme);
         // move matrix folyamatosan
         glUniformMatrix4fv(moveMatrix_location, 1, GL_FALSE, moveMatrix);
 
@@ -477,7 +588,14 @@ int main() {
         model = rotate_y_deg(identity_mat4(), glfwGetTime() * 100);
         glUniformMatrix4fv(model_location, 1, GL_FALSE, model.m);
 
-        
+        glUseProgram(shader_programme3);
+        // move matrix folyamatosan
+        glUniformMatrix4fv(moveMatrix_location3, 1, GL_FALSE, moveMatrix);
+
+        // forgas modellje
+        model = rotate_y_deg(identity_mat4(), -glfwGetTime() * 100);
+        glUniformMatrix4fv(model_location, 1, GL_FALSE, model.m);
+
 
         if (GLFW_PRESS == glfwGetKey(g_window, GLFW_KEY_ESCAPE)) { glfwSetWindowShouldClose(g_window, 1); }
         // put the stuff we've been drawing onto the display
