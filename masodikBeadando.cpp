@@ -1,18 +1,7 @@
-/******************************************************************************\
-| OpenGL 4 Example Code.                                                       |
-| Accompanies written series "Anton's OpenGL 4 Tutorials"                      |
-| Email: anton at antongerdelan dot net                                        |
-| First version 27 Jan 2014                                                    |
-| Dr Anton Gerdelan, Trinity College Dublin, Ireland.                          |
-| See individual libraries for separate legal notices                          |
-|******************************************************************************|
-| Virtual Camera - create and modify VIEW and PROJECTION matrices              |
-| keyboard controls: W,S,A,D,left and right arrows                             |
-\******************************************************************************/
 #include "gl_utils.h"
 #include "maths_funcs.h"
-#include <GL/glew.h>    // include GLEW and new version of GL on Windows
-#include <GLFW/glfw3.h> // GLFW helper library
+#include <GL/glew.h>
+#include <GLFW/glfw3.h> 
 #include <assert.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -533,13 +522,13 @@ int main() {
         if (fabs(last_position) > 1.0) { speed = -speed; }
         /*-----------------------------move camera here-------------------------------*/
         // control keys
-        // a haromszog pont az ellentetet csinalja a mi pozicio valtasunknak
+        // a kocka pont az ellentetet csinalja a mi pozicio valtasunknak
         bool cam_moved = false;
-        if (glfwGetKey(g_window, GLFW_KEY_A)) {
+        if (glfwGetKey(g_window, GLFW_KEY_D)) {
             cam_pos[0] -= cam_speed * elapsed_seconds;
             cam_moved = true;
         }
-        if (glfwGetKey(g_window, GLFW_KEY_D)) {
+        if (glfwGetKey(g_window, GLFW_KEY_A)) {
             cam_pos[0] += cam_speed * elapsed_seconds;
             cam_moved = true;
         }
