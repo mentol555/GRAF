@@ -21,16 +21,30 @@ int g_gl_width = 960;
 int g_gl_height = 960;
 GLFWwindow* g_window = NULL;
 
+double bezier(int i, double u, int n) {
+    // Binomiális együttható számítása
+    double binomialCoefficient = 1.0;
+    for (int j = 1; j <= i; j++) {
+        binomialCoefficient *= (double)(n - j + 1) / j;
+    }
+
+    // Bézier-görbe pontjának kiszámítása
+    double result = binomialCoefficient * pow(u, i) * pow(1 - u, n - i);
+
+    return result;
+}
+
 int main() {
     const GLubyte* renderer;
     const GLubyte* version;
-    GLuint vao, vao2;
-    GLuint vbo, vbo2;
+    GLuint vbo, vbo2, vbo3;
+    GLuint vao, vao2, vao3;
 
     start_gl();
 
-    // = { 0.0f, 0.5f, 0.0f, 0.5f, -0.5f, 0.0f, -0.5f, -0.5f, 0.0f };
     float step = 0.2f;
+    // x oszlopok szama
+    // y sorok szama
     int x = 6, y = 5;
     int k = 0;
     int c = 0;
@@ -40,11 +54,10 @@ int main() {
     for (int j = 0; j < y; j++) {
         for (int i = 0; i < x; i++)
         {
-            points[k * 3] = -0.5f + i * step;
+            points[k * 3] = -0.5f + (i * step);
             points[k * 3 + 1] = -1.0f + (1.0f / y) + (j * 0.2f);
             points[k * 3 + 2] = 0.0f;
             k = k + 1;
-
         }
     }
     for (int j = 0; j <= (x * 3); j += 3) {
@@ -55,11 +68,11 @@ int main() {
             c = c + 1;
         }
     }
-    //cout << c;
+    /*
     for (int i = 0; i < sizeof(points2) / 4; i += 3) {
         cout << "X= " << points2[i] << "Y= " << points2[i + 1] << "Z= " << points2[i + 2] << endl;
     }
-
+    */
 
 
 
@@ -82,22 +95,45 @@ int main() {
         "}";
         
 
-
     GLuint vert_shader, frag_shader;
 
     GLuint shader_programme;
-
-    if (!glfwInit()) {
-        fprintf(stderr, "ERROR: could not start GLFW3\n");
-        return 1;
-    }
 
 
     glEnable(GL_DEPTH_TEST);
 
     glDepthFunc(GL_LESS);
 
+    GLfloat curve_points[3030] = {}; // nemtom miert 3030
+    int curve_i = 0;
 
+    for (float u = 0; u < 1; u = u + 0.1){
+        for (float v = 0; v < 1; v = v + 0.01){
+
+            k = 0;
+            float Bezierx = 0;
+            float Beziery = 0;
+            float Bezierz = 0;
+
+            for (int i = 0; i < x; i++) {
+                for (int j = 0; j < y; j++) {
+                    Bezierx += bezier(i, u, x) * bezier(j, v, y) * points[k]; //x koord
+                    Beziery += bezier(i, u, x) * bezier(j, v, y) * points[k + 1]; //y koord
+                    Bezierz += bezier(i, u, x) * bezier(j, v, y) * points[k + 2]; //z koord
+                    cout << points[k] << " " << points[k + 1] << " " << points[k + 2] << endl;
+                    k += 3;
+                }
+            }
+            curve_points[curve_i] = Bezierx;
+            curve_points[curve_i + 1] = Beziery;
+            curve_points[curve_i + 2] = Bezierz;
+
+            curve_i+=3;
+        }
+
+    }
+
+    // SHADERS
     glGenBuffers(1, &vbo);
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
     glBufferData(GL_ARRAY_BUFFER, x * y * 3 * sizeof(GLfloat), points, GL_STATIC_DRAW);
@@ -106,26 +142,28 @@ int main() {
     glBindBuffer(GL_ARRAY_BUFFER, vbo2);
     glBufferData(GL_ARRAY_BUFFER, x * y * 3 * sizeof(GLfloat), points2, GL_STATIC_DRAW);
 
-
+    glGenBuffers(1, &vbo3);
+    glBindBuffer(GL_ARRAY_BUFFER, vbo3);
+    glBufferData(GL_ARRAY_BUFFER, 3030 * sizeof(GLfloat), curve_points, GL_STATIC_DRAW);
 
     glGenVertexArrays(1, &vao);
     glBindVertexArray(vao);
-
     glEnableVertexAttribArray(0);
-
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
-
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, NULL);
 
     glGenVertexArrays(1, &vao2);
     glBindVertexArray(vao2);
-
     glEnableVertexAttribArray(0);
-
     glBindBuffer(GL_ARRAY_BUFFER, vbo2);
-
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, NULL);
 
+
+    glGenVertexArrays(1, &vao3);
+    glBindVertexArray(vao3);
+    glEnableVertexAttribArray(0);
+    glBindBuffer(GL_ARRAY_BUFFER, vbo3);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, NULL);
 
 
     vert_shader = glCreateShader(GL_VERTEX_SHADER);
@@ -159,7 +197,7 @@ int main() {
     float cam_speed = 1.0f;                 // 1 unit per second
     float cam_yaw_speed = 10.0f;                // 10 degrees per second
     float cam_pos[] = { 0.0f, -1.5f, 1.0f }; // don't start at zero, or we will be too close
-    float cam_yaw = 45.0f;                 //x-rotation in degrees
+    float cam_yaw = 60.0f;                 //x-rotation in degrees
     // a kamera mozgasanak ellentetet fogjuk csinalni a targyal, igy azt az erzetet keltve hogy mi mozgunk
     mat4 T = translate(identity_mat4(), vec3(-cam_pos[0], -cam_pos[1], -cam_pos[2]));
     mat4 R = rotate_x_deg(identity_mat4(), -cam_yaw);
@@ -186,6 +224,7 @@ int main() {
     float speed = 1.0f; // move at 1 unit per second
     float last_position = 0.0f; // pozicio meg skalazas
 
+
     glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
     while (!glfwWindowShouldClose(g_window)) {
 
@@ -204,17 +243,22 @@ int main() {
         glViewport(0, 0, g_gl_width, g_gl_height);
 
         glBindVertexArray(vao);
-
         glDrawArrays(GL_POINTS, 0, x * y);
+
         for (int i = 0; i <= y; i++) {
             glDrawArrays(GL_LINE_STRIP, i * x, x);
         }
-        glBindVertexArray(vao2);
 
+        glBindVertexArray(vao2);
         glDrawArrays(GL_POINTS, 0, x * y);
         for (int i = 0; i <= x; i++) {
             glDrawArrays(GL_LINE_STRIP, i * y, y);
         }
+
+        glBindVertexArray(vao3);
+        glDrawArrays(GL_POINTS, 100, 100);
+        
+
 
         // update other events like input handling
         glfwPollEvents();
@@ -226,7 +270,6 @@ int main() {
         // control keys
         bool cam_moved = false;
         if (glfwGetKey(g_window, GLFW_KEY_D)) {
-            cout << "KEYPRESS"<<endl;
             cam_pos[0] -= cam_speed * elapsed_seconds;
             cam_moved = true;
         }
