@@ -45,21 +45,29 @@ int main() {
     float step = 0.2f;
     // x oszlopok szama
     // y sorok szama
-    int x = 6, y = 5;
+    int x = 6, y = 6;
     int k = 0;
     int c = 0;
 
-    GLfloat points[300] = {};
+    GLfloat points[216] = {};
     GLfloat points2[300] = {};
     for (int j = 0; j < y; j++) {
         for (int i = 0; i < x; i++)
         {
+            const float gorbulet = 0.02f;
             points[k * 3] = -0.5f + (i * step);
             points[k * 3 + 1] = -1.0f + (1.0f / y) + (j * 0.2f);
-            points[k * 3 + 2] = 0.0f;
+
+            points[k * 3 + 2] = i<x/2 ? gorbulet * i : -gorbulet * i;
+            if (j < y / 2)
+                points[k*3+2] += gorbulet * j;
+            else 
+                points[k*3+2] -= gorbulet * j;
+
             k = k + 1;
         }
     }
+
     for (int j = 0; j <= (x * 3); j += 3) {
         for (int i = 0; i < (x * 3 * y); i += (x * 3)) {
             points2[c * 3] = points[i + j];
@@ -68,11 +76,13 @@ int main() {
             c = c + 1;
         }
     }
+   
     /*
-    for (int i = 0; i < sizeof(points2) / 4; i += 3) {
-        cout << "X= " << points2[i] << "Y= " << points2[i + 1] << "Z= " << points2[i + 2] << endl;
+    for (int i = 0; i < sizeof(points) / 4; i += 3) {
+        cout << " X= " << points[i] << " Y= " << points[i + 1] << " Z= " << points[i + 2] << endl;
     }
     */
+   
 
 
 
@@ -93,46 +103,57 @@ int main() {
         "void main () {"
         "  frag_colour = vec4(1.0f, 0.5f, 0.0f, 1.0);"
         "}";
-        
+
+    const char* fragment_shader2 =
+        "#version 410\n"
+
+        "out vec4 frag_colour;"
+        "void main () {"
+        "  frag_colour = vec4(0.5f, 0.0f, 1.0f, 1.0);"
+        "}";
+
 
     GLuint vert_shader, frag_shader;
 
     GLuint shader_programme;
 
-
     glEnable(GL_DEPTH_TEST);
 
     glDepthFunc(GL_LESS);
 
-    GLfloat curve_points[3030] = {}; // nemtom miert 3030
+    GLfloat curve_points[30000] = {}; // nemtom miert 3030
     int curve_i = 0;
 
-    for (float u = 0; u < 1; u = u + 0.1){
-        for (float v = 0; v < 1; v = v + 0.01){
+    for (float u = 0; u < 1; u += 0.1) {
+        for (float v = 0; v < 1; v += 0.01) {
 
             k = 0;
             float Bezierx = 0;
             float Beziery = 0;
             float Bezierz = 0;
 
-            for (int i = 0; i < x; i++) {
-                for (int j = 0; j < y; j++) {
-                    Bezierx += bezier(i, u, x) * bezier(j, v, y) * points[k]; //x koord
-                    Beziery += bezier(i, u, x) * bezier(j, v, y) * points[k + 1]; //y koord
-                    Bezierz += bezier(i, u, x) * bezier(j, v, y) * points[k + 2]; //z koord
-                    cout << points[k] << " " << points[k + 1] << " " << points[k + 2] << endl;
-                    k += 3;
+            for (int j = 0; j < y; j++) {
+                for (int i = 0; i < x; i++) {
+                    if (v > 0.9) {
+                        cout << Bezierx <<"     ";
+                    }
+                    Bezierx += bezier(i, u, x) * bezier(j, v, y) * points[k*3]; //x koord
+                    Beziery += bezier(i, u, x) * bezier(j, v, y) * points[k*3 + 1]; //y koord
+                    Bezierz += bezier(i, u, x) * bezier(j, v, y) * points[k*3 + 2]; //z koord
+                    //cout << points[k] << " " << points[k + 1] << " " << points[k + 2] << endl;
+                    k++;
                 }
             }
-            curve_points[curve_i] = Bezierx;
-            curve_points[curve_i + 1] = Beziery;
-            curve_points[curve_i + 2] = Bezierz;
-
-            curve_i+=3;
+            //cout << Bezierx << " " << Beziery << " " << Bezierz << endl;
+            curve_points[curve_i*3] = Bezierx;
+            curve_points[curve_i*3 + 1] = Beziery;
+            curve_points[curve_i*3 + 2] = Bezierz;
+            //cout << "u:" << u << " v:" << v << "curve_i: " << curve_i << endl;
+            curve_i++;
         }
 
     }
-
+    cout << endl << curve_i;
     // SHADERS
     glGenBuffers(1, &vbo);
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
@@ -177,7 +198,6 @@ int main() {
     glAttachShader(shader_programme, vert_shader);
     glLinkProgram(shader_programme);
 
-
     /*--------------------------create camera matrices----------------------------*/
    /* create PROJECTION MATRIX */
    // input variables
@@ -214,9 +234,6 @@ int main() {
     glUniformMatrix4fv(view_mat_location, 1, GL_FALSE, view_mat.m);
     glUniformMatrix4fv(proj_mat_location, 1, GL_FALSE, proj_mat);
 
-
-    glUseProgram(shader_programme);
-
     glEnable(GL_DEPTH_TEST);
 
     glPointSize(15.0f);
@@ -243,21 +260,25 @@ int main() {
         glViewport(0, 0, g_gl_width, g_gl_height);
 
         glBindVertexArray(vao);
-        glDrawArrays(GL_POINTS, 0, x * y);
+        glDrawArrays(GL_POINTS, 0, x*y);
 
+        
         for (int i = 0; i <= y; i++) {
             glDrawArrays(GL_LINE_STRIP, i * x, x);
         }
 
+        /*
         glBindVertexArray(vao2);
         glDrawArrays(GL_POINTS, 0, x * y);
         for (int i = 0; i <= x; i++) {
             glDrawArrays(GL_LINE_STRIP, i * y, y);
         }
+        */
 
+        glUseProgram(shader_programme);
         glBindVertexArray(vao3);
-        glDrawArrays(GL_POINTS, 100, 100);
-        
+        glDrawArrays(GL_POINTS, 0, 1010);
+
 
 
         // update other events like input handling
