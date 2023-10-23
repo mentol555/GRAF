@@ -37,7 +37,7 @@ double bezier(int i, double u, int n) {
 int main() {
     const GLubyte* renderer;
     const GLubyte* version;
-    GLuint vbo, vbo2, vbo3;
+    GLuint vbo, vbo2, vbo3, points_color_vbo, surface_color_vbo;
     GLuint vao, vao2, vao3;
 
     start_gl();
@@ -45,19 +45,24 @@ int main() {
     float step = 0.2f;
     // x oszlopok szama
     // y sorok szama
-    int x = 6, y = 6;
+    int x = 5, y = 5;
+
     int k = 0;
     int c = 0;
+    const float gorbulet = 0.05f;
 
-    GLfloat points[216] = {};
+    GLfloat points[300] = {};
     GLfloat points2[300] = {};
+    GLfloat points_color[300] = {};
     for (int j = 0; j < y; j++) {
         for (int i = 0; i < x; i++)
         {
-            const float gorbulet = 0.02f;
+            points_color[k * 3] = 1.0f;
+            points_color[k * 3 + 1] = 0.5f;
+            points_color[k * 3 + 2] = 0.0f;
+
             points[k * 3] = -0.5f + (i * step);
             points[k * 3 + 1] = -1.0f + (1.0f / y) + (j * 0.2f);
-
             points[k * 3 + 2] = i<x/2 ? gorbulet * i : -gorbulet * i;
             if (j < y / 2)
                 points[k*3+2] += gorbulet * j;
@@ -76,40 +81,30 @@ int main() {
             c = c + 1;
         }
     }
-   
-    /*
-    for (int i = 0; i < sizeof(points) / 4; i += 3) {
-        cout << " X= " << points[i] << " Y= " << points[i + 1] << " Z= " << points[i + 2] << endl;
-    }
-    */
-   
+
 
 
 
 
     const char* vertex_shader =
         "#version 410\n"
-        "in vec3 vertex_position;"
+        "layout(location = 0) in vec3 vertex_position;"
+        "layout(location = 1) in vec3 vertex_color;"
+        "out vec3 color;"
+
         "uniform mat4 view, proj;"
 
         "void main() {"
+        "   color = vertex_color;"
         "   gl_Position = proj * view * vec4(vertex_position, 1.0);"
         "}";
 
     const char* fragment_shader =
         "#version 410\n"
-
+        "in vec3 color;"
         "out vec4 frag_colour;"
         "void main () {"
-        "  frag_colour = vec4(1.0f, 0.5f, 0.0f, 1.0);"
-        "}";
-
-    const char* fragment_shader2 =
-        "#version 410\n"
-
-        "out vec4 frag_colour;"
-        "void main () {"
-        "  frag_colour = vec4(0.5f, 0.0f, 1.0f, 1.0);"
+        "  frag_colour = vec4(color, 1.0);"
         "}";
 
 
@@ -121,10 +116,12 @@ int main() {
 
     glDepthFunc(GL_LESS);
 
-    GLfloat curve_points[30000] = {}; // nemtom miert 3030
+    GLfloat curve_points[5000] = {}; // nemtom miert 3030
+    GLfloat surface_color[5000] = {};
+
     int curve_i = 0;
 
-    for (float u = 0; u < 1; u += 0.1) {
+    for (float u = 0; u < 1; u += 0.11) {
         for (float v = 0; v < 1; v += 0.01) {
 
             k = 0;
@@ -134,13 +131,9 @@ int main() {
 
             for (int j = 0; j < y; j++) {
                 for (int i = 0; i < x; i++) {
-                    if (v > 0.9) {
-                        cout << Bezierx <<"     ";
-                    }
-                    Bezierx += bezier(i, u, x) * bezier(j, v, y) * points[k*3]; //x koord
-                    Beziery += bezier(i, u, x) * bezier(j, v, y) * points[k*3 + 1]; //y koord
-                    Bezierz += bezier(i, u, x) * bezier(j, v, y) * points[k*3 + 2]; //z koord
-                    //cout << points[k] << " " << points[k + 1] << " " << points[k + 2] << endl;
+                    Bezierx += bezier(i, u, x - 1) * bezier(j, v, y - 1) * points[k * 3]; // x koord
+                    Beziery += bezier(i, u, x - 1) * bezier(j, v, y - 1) * points[k * 3 + 1]; // y koord
+                    Bezierz += bezier(i, u, x - 1) * bezier(j, v, y - 1) * points[k * 3 + 2]; // z koord
                     k++;
                 }
             }
@@ -148,44 +141,70 @@ int main() {
             curve_points[curve_i*3] = Bezierx;
             curve_points[curve_i*3 + 1] = Beziery;
             curve_points[curve_i*3 + 2] = Bezierz;
+
+            surface_color[curve_i * 3] = 0.5f;
+            surface_color[curve_i * 3 + 1] = 0.0f;
+            surface_color[curve_i * 3 + 2] = 1.0f;
             //cout << "u:" << u << " v:" << v << "curve_i: " << curve_i << endl;
             curve_i++;
         }
-
     }
-    cout << endl << curve_i;
+
     // SHADERS
+
+    // points 1
     glGenBuffers(1, &vbo);
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
     glBufferData(GL_ARRAY_BUFFER, x * y * 3 * sizeof(GLfloat), points, GL_STATIC_DRAW);
 
-    glGenBuffers(1, &vbo2);
-    glBindBuffer(GL_ARRAY_BUFFER, vbo2);
-    glBufferData(GL_ARRAY_BUFFER, x * y * 3 * sizeof(GLfloat), points2, GL_STATIC_DRAW);
-
-    glGenBuffers(1, &vbo3);
-    glBindBuffer(GL_ARRAY_BUFFER, vbo3);
-    glBufferData(GL_ARRAY_BUFFER, 3030 * sizeof(GLfloat), curve_points, GL_STATIC_DRAW);
+    glGenBuffers(1, &points_color_vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, points_color_vbo);
+    glBufferData(GL_ARRAY_BUFFER, x * y * 3 * sizeof(GLfloat), points_color, GL_STATIC_DRAW);
 
     glGenVertexArrays(1, &vao);
     glBindVertexArray(vao);
     glEnableVertexAttribArray(0);
+    glEnableVertexAttribArray(1);
+
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, NULL);
+    glBindBuffer(GL_ARRAY_BUFFER, points_color_vbo);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, NULL);
+
+    // points 2
+    glGenBuffers(1, &vbo2);
+    glBindBuffer(GL_ARRAY_BUFFER, vbo2);
+    glBufferData(GL_ARRAY_BUFFER, x * y * 3 * sizeof(GLfloat), points2, GL_STATIC_DRAW);
+
 
     glGenVertexArrays(1, &vao2);
     glBindVertexArray(vao2);
     glEnableVertexAttribArray(0);
+    glEnableVertexAttribArray(1);
+
     glBindBuffer(GL_ARRAY_BUFFER, vbo2);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, NULL);
+    glBindBuffer(GL_ARRAY_BUFFER, points_color_vbo);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, NULL);
 
+    // surface
+    glGenBuffers(1, &vbo3);
+    glBindBuffer(GL_ARRAY_BUFFER, vbo3);
+    glBufferData(GL_ARRAY_BUFFER, 3030 * sizeof(GLfloat), curve_points, GL_STATIC_DRAW);
+
+    glGenBuffers(1, &surface_color_vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, surface_color_vbo);
+    glBufferData(GL_ARRAY_BUFFER, 3030 * sizeof(GLfloat), surface_color, GL_STATIC_DRAW);
 
     glGenVertexArrays(1, &vao3);
     glBindVertexArray(vao3);
     glEnableVertexAttribArray(0);
+    glEnableVertexAttribArray(1);
+
     glBindBuffer(GL_ARRAY_BUFFER, vbo3);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, NULL);
-
+    glBindBuffer(GL_ARRAY_BUFFER, surface_color_vbo);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, NULL);
 
     vert_shader = glCreateShader(GL_VERTEX_SHADER);
     glShaderSource(vert_shader, 1, &vertex_shader, NULL);
@@ -236,7 +255,7 @@ int main() {
 
     glEnable(GL_DEPTH_TEST);
 
-    glPointSize(15.0f);
+    glPointSize(5.0f);
 
     float speed = 1.0f; // move at 1 unit per second
     float last_position = 0.0f; // pozicio meg skalazas
@@ -267,13 +286,13 @@ int main() {
             glDrawArrays(GL_LINE_STRIP, i * x, x);
         }
 
-        /*
+        
         glBindVertexArray(vao2);
         glDrawArrays(GL_POINTS, 0, x * y);
         for (int i = 0; i <= x; i++) {
             glDrawArrays(GL_LINE_STRIP, i * y, y);
         }
-        */
+        
 
         glUseProgram(shader_programme);
         glBindVertexArray(vao3);
