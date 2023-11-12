@@ -9,6 +9,7 @@
 #include <string.h>
 #include <time.h>
 #include <iostream>
+#include <iomanip>
 #define _USE_MATH_DEFINES
 #include <math.h>
 #include "gl_utils.h"
@@ -27,13 +28,10 @@ int secondcurrentPoint = 0;
 char selectedAxis = 0;
 
 float step = 0.2f;
-// x oszlopok szama
-// y sorok szama
-int x = 5, y = 5;
 
-// x oszlopok szama
-// y sorok szama
 int oszlop = 5, sor = 5;
+
+
 GLint dragged = -1;
 int k = 0;
 int c = 0;
@@ -59,7 +57,7 @@ GLfloat curve_points2[5000] = {}; // masik iranyba a curve-k
 
 GLfloat surface_color[5000] = {};
 
-GLfloat surface_triangle[5000] = {};
+GLfloat surface_triangle[500000] = {};
 
 GLFWwindow* g_window = NULL;
 
@@ -78,33 +76,32 @@ double bezier(int i, double u, int n) {
     return result;
 }
 
-
 // BEZIER generálás egy irányba.
 // Megkapja a curve_points-ot, amibe lesznek mentve egyik irányba a görbe pontjai
 // surface color annyi hogy legyen színe, most statikusan egyszínű de lehet variálni
 
 // ahany alappont oszlopunk van, ketszer annyi felulet oszlopunk legyen
-double oszlopEgyseg = (double)1 / ((oszlop - 1) * 2);
+float oszlopEgyseg = 1 / ((float)(oszlop - 1) * 2);
 // ahany alappont sorunk van, ketszer annyi felulet sorunk legyen
-double sorEgyseg = (double)1 / ((sor - 1) * 5);
+float sorEgyseg = 1 / ((float)(sor - 1) * 2);
+
+float epsilon = 0.0001;
 
 void bezierGenerator(GLfloat curve_points[5000], GLfloat surface_color[5000], GLfloat points[]) {
     int k = 0;
     int curve_i = 0;
-
-    for (float u = 0; u < 1 + oszlopEgyseg; u += oszlopEgyseg) {
-        for (float v = 0; v < 1 + sorEgyseg; v += sorEgyseg) {
-
+    for (float u = 0; u + epsilon < oszlopEgyseg * (oszlop * 2 - 1); u += oszlopEgyseg) {
+        for (float v = 0; v + epsilon < sorEgyseg * (sor * 2 - 1); v += sorEgyseg) {
             k = 0;
             float Bezierx = 0;
             float Beziery = 0;
             float Bezierz = 0;
 
-            for (int j = 0; j < y; j++) {
-                for (int i = 0; i < x; i++) {
-                    Bezierx += bezier(i, u, x - 1) * bezier(j, v, y - 1) * points[k * 3]; // x koord
-                    Beziery += bezier(i, u, x - 1) * bezier(j, v, y - 1) * points[k * 3 + 1]; // y koord
-                    Bezierz += bezier(i, u, x - 1) * bezier(j, v, y - 1) * points[k * 3 + 2]; // z koord
+            for (int j = 0; j < sor; j++) {
+                for (int i = 0; i < oszlop; i++) {
+                    Bezierx += bezier(i, u, oszlop - 1) * bezier(j, v, sor - 1) * points[k * 3]; // x koord
+                    Beziery += bezier(i, u, oszlop - 1) * bezier(j, v, sor - 1) * points[k * 3 + 1]; // y koord
+                    Bezierz += bezier(i, u, oszlop - 1) * bezier(j, v, sor - 1) * points[k * 3 + 2]; // z koord
                     k++;
                 }
             }
@@ -120,57 +117,63 @@ void bezierGenerator(GLfloat curve_points[5000], GLfloat surface_color[5000], GL
             curve_i++;
         }
     }
+}
+
+void triangulization(GLfloat curve_points[5000]) {
     int j = 0;
     int jobb = 1;
     int temp = 0;
     int count = 0;
-    for (int i = 0; i < 19; i += 3) {
-        if (jobb == 1) {
+    for (int i = 0; i < 10000; i += 6) {
 
-            surface_triangle[i * 3] = curve_points[j * 3];
-            surface_triangle[i * 3 + 1] = curve_points[j * 3 + 1];
-            surface_triangle[i * 3 + 2] = curve_points[j * 3 + 2];
-            surface_triangle[i * 3 + 3] = curve_points[j * 3 + (3 * 3)];
-            surface_triangle[i * 3 + 4] = curve_points[j * 3 + (3 * 3) + 1];
-            surface_triangle[i * 3 + 5] = curve_points[j * 3 + (3 * 3) + 2];
-            
-            surface_triangle[i * 3 + 6] = curve_points[j * 3 + (19 * 3)];
-            surface_triangle[i * 3 + 7] = curve_points[j * 3 + (19 * 3) + 1];
-            surface_triangle[i * 3 + 8] = curve_points[j * 3 + (19 * 3) + 2];
-            
-            j += 3;
-            if (i != 0) {
-                if (i % 18 == 0) {
-                    jobb = 0;
-                    count++;
-                    continue;
-                }
-            }
+        surface_triangle[i * 3] = curve_points[j * 3];
+        surface_triangle[i * 3 + 1] = curve_points[j * 3 + 1];
+        surface_triangle[i * 3 + 2] = curve_points[j * 3 + 2];
+        surface_triangle[i * 3 + 3] = curve_points[j * 3 + (1 * 3)];
+        surface_triangle[i * 3 + 4] = curve_points[j * 3 + (1 * 3) + 1];
+        surface_triangle[i * 3 + 5] = curve_points[j * 3 + (1 * 3) + 2];
+        surface_triangle[i * 3 + 6] = curve_points[j * 3 + (9 * 3)];
+        surface_triangle[i * 3 + 7] = curve_points[j * 3 + (9 * 3) + 1];
+        surface_triangle[i * 3 + 8] = curve_points[j * 3 + (9 * 3) + 2];
 
-        }
-        if (jobb == 0) {
-            surface_triangle[i * 3] = curve_points[j * 3 + (3 * 3)];
-            surface_triangle[i * 3 + 1] = curve_points[j * 3 + (3 * 3) + 1];
-            surface_triangle[i * 3 + 2] = curve_points[j * 3 + (3 * 3) + 2];
-            surface_triangle[i * 3 + 3] = curve_points[j * 3];
-            surface_triangle[i * 3 + 4] = curve_points[j * 3 + 1];
-            surface_triangle[i * 3 + 5] = curve_points[j * 3 + 2];
-            surface_triangle[i * 3 + 6] = curve_points[j * 3 + (26 * 3) - temp];
-            surface_triangle[i * 3 + 7] = curve_points[j * 3 + (26 * 3) + 1 - temp];
-            surface_triangle[i * 3 + 8] = curve_points[j * 3 + (26 * 3) + 2 - temp];
-            j += 3;
-            temp -= 3;
-            if (i % 18 == 0) {
-                jobb = 1;
-                temp = 0;
-                cout << "i2:      " << i << endl;
-                cout << "Bent vagyok te hitvány szar itt is" << endl;
-                continue;
-            }
-        }
+
+
+        surface_triangle[i * 3 + 9] = curve_points[j * 3 + (9 * 3)];
+        surface_triangle[i * 3 + 10] = curve_points[j * 3 + (9 * 3) + 1];
+        surface_triangle[i * 3 + 11] = curve_points[j * 3 + (9 * 3) + 2];
+        surface_triangle[i * 3 + 12] = curve_points[j * 3 + (10 * 3)];
+        surface_triangle[i * 3 + 13] = curve_points[j * 3 + (10 * 3) + 1];
+        surface_triangle[i * 3 + 14] = curve_points[j * 3 + (10 * 3) + 2];
+        surface_triangle[i * 3 + 15] = curve_points[j * 3 + (1 * 3)];
+        surface_triangle[i * 3 + 16] = curve_points[j * 3 + (1 * 3) + 1];
+        surface_triangle[i * 3 + 17] = curve_points[j * 3 + (1 * 3) + 2];
+        j += 1;
+
+
+        /* if (i >= 19 && i<36) {
+             surface_triangle[i * 3] = curve_points[j * 3 + (3 * 3)];
+             surface_triangle[i * 3 + 1] = curve_points[j * 3 + (3 * 3) + 1];
+             surface_triangle[i * 3 + 2] = curve_points[j * 3 + (3 * 3) + 2];
+             surface_triangle[i * 3 + 3] = curve_points[j * 3];
+             surface_triangle[i * 3 + 4] = curve_points[j * 3 + 1];
+             surface_triangle[i * 3 + 5] = curve_points[j * 3 + 2];
+             surface_triangle[i * 3 + 6] = curve_points[j * 3 + (26 * 3) - temp];
+             surface_triangle[i * 3 + 7] = curve_points[j * 3 + (26 * 3) + 1 - temp];
+             surface_triangle[i * 3 + 8] = curve_points[j * 3 + (26 * 3) + 2 - temp];
+             j += 3;
+             temp -= 3;
+
+                 temp = 0;
+                 cout << "i2:      " << i << endl;
+                 cout << "Bent vagyok te hitvány szar itt is" << endl;
+
+
+
+     }*/
     }
+    glBindBuffer(GL_ARRAY_BUFFER, vbo_triangle1);
+    glBufferData(GL_ARRAY_BUFFER, 50000 * sizeof(GLfloat), surface_triangle, GL_STATIC_DRAW);
 }
-
 
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset) {
     points[currentPoint * 3 + selectedAxis] += 0.015f * yoffset;
@@ -193,6 +196,9 @@ void scroll_callback(GLFWwindow* window, double xoffset, double yoffset) {
     glBindBuffer(GL_ARRAY_BUFFER, vbo4);
     glBufferData(GL_ARRAY_BUFFER, 3030 * sizeof(GLfloat), curve_points2, GL_STATIC_DRAW);
 
+    // háromszögelés újraszámolása
+    triangulization(curve_points);
+
 }
 
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods) {
@@ -213,7 +219,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
             }
         }
     }
-    cout << endl << currentPoint << " " << secondcurrentPoint;
+    //cout << endl << currentPoint << " " << secondcurrentPoint;
     if (key == GLFW_KEY_X && action == GLFW_PRESS) {
         selectedAxis = 0;
     }
@@ -234,17 +240,17 @@ int main() {
 
     // PONT GENERÁLÁSOK
 
-    for (int j = 0; j < y; j++) {
-        for (int i = 0; i < x; i++)
+    for (int j = 0; j < sor; j++) {
+        for (int i = 0; i < oszlop; i++)
         {
             points_color[k * 3] = 1.0f;
             points_color[k * 3 + 1] = 0.5f;
             points_color[k * 3 + 2] = 0.0f;
 
             points[k * 3] = -0.5f + (i * step);
-            points[k * 3 + 1] = 0.0f + (1.0f / y) + (j * 0.2f);
-            points[k * 3 + 2] = i < x / 2 ? gorbulet * i : -gorbulet * i;
-            if (j < y / 2)
+            points[k * 3 + 1] = 0.0f + (1.0f / sor) + (j * 0.2f);
+            points[k * 3 + 2] = i < oszlop / 2 ? gorbulet * i : -gorbulet * i;
+            if (j < sor / 2)
                 points[k * 3 + 2] += gorbulet * j;
             else
                 points[k * 3 + 2] -= gorbulet * j;
@@ -253,8 +259,8 @@ int main() {
         }
     }
 
-    for (int j = 0; j <= (x * 3); j += 3) {
-        for (int i = 0; i < (x * 3 * y); i += (x * 3)) {
+    for (int j = 0; j <= (oszlop * 3); j += 3) {
+        for (int i = 0; i < (oszlop * 3 * sor); i += (oszlop * 3)) {
             points2[c * 3] = points[i + j];
             points2[c * 3 + 1] = points[i + j + 1];
             points2[c * 3 + 2] = points[i + j + 2];
@@ -297,13 +303,15 @@ int main() {
     // BEZIER FELÜLET KISZÁMOLÁSA, CURVE_POINTS-ba tároljuk ezeket
     bezierGenerator(curve_points, surface_color, points);
     bezierGenerator(curve_points2, surface_color, points2);
-
+    triangulization(curve_points);
 
 
     // SHADERS
+    
+    // háromszögelés
     glGenBuffers(1, &vbo_triangle1);
     glBindBuffer(GL_ARRAY_BUFFER, vbo_triangle1);
-    glBufferData(GL_ARRAY_BUFFER, 3030 * sizeof(GLfloat), surface_triangle, GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, 50000 * sizeof(GLfloat), surface_triangle, GL_STATIC_DRAW);
 
     glGenVertexArrays(1, &vao5);
     glBindVertexArray(vao5);
@@ -316,11 +324,11 @@ int main() {
     // points 1
     glGenBuffers(1, &vbo);
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
-    glBufferData(GL_ARRAY_BUFFER, x * y * 3 * sizeof(GLfloat), points, GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, oszlop * sor * 3 * sizeof(GLfloat), points, GL_STATIC_DRAW);
 
     glGenBuffers(1, &points_color_vbo);
     glBindBuffer(GL_ARRAY_BUFFER, points_color_vbo);
-    glBufferData(GL_ARRAY_BUFFER, x * y * 3 * sizeof(GLfloat), points_color, GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, oszlop * sor * 3 * sizeof(GLfloat), points_color, GL_STATIC_DRAW);
 
     glGenVertexArrays(1, &vao);
     glBindVertexArray(vao);
@@ -335,11 +343,11 @@ int main() {
     // points 2
     glGenBuffers(1, &vbo2);
     glBindBuffer(GL_ARRAY_BUFFER, vbo2);
-    glBufferData(GL_ARRAY_BUFFER, x * y * 3 * sizeof(GLfloat), points2, GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, oszlop * sor * 3 * sizeof(GLfloat), points2, GL_STATIC_DRAW);
 
     glGenBuffers(1, &points_color_vbo);
     glBindBuffer(GL_ARRAY_BUFFER, points_color_vbo);
-    glBufferData(GL_ARRAY_BUFFER, x * y * 3 * sizeof(GLfloat), points_color, GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, oszlop * sor * 3 * sizeof(GLfloat), points_color, GL_STATIC_DRAW);
 
     glGenVertexArrays(1, &vao2);
     glBindVertexArray(vao2);
@@ -563,8 +571,8 @@ int main() {
         // POINTS 1
         glBindVertexArray(vao);
         //glDrawArrays(GL_POINTS, 0, x * y);
-        for (int i = 0; i <= y; i++) {
-            glDrawArrays(GL_LINE_STRIP, i * x, x);
+        for (int i = 0; i <= sor; i++) {
+            glDrawArrays(GL_LINE_STRIP, i * oszlop, oszlop);
         }
 
         glDrawArrays(GL_POINTS, currentPoint, 1);
@@ -572,8 +580,8 @@ int main() {
         // POINTS 2
         glBindVertexArray(vao2);
         //glDrawArrays(GL_POINTS, 0, x * y);
-        for (int i = 0; i <= x; i++) {
-            glDrawArrays(GL_LINE_STRIP, i * y, y);
+        for (int i = 0; i <= oszlop; i++) {
+            glDrawArrays(GL_LINE_STRIP, i * sor, sor);
         }
 
         glPointSize(3.0f);
@@ -583,21 +591,21 @@ int main() {
         glBindVertexArray(vao3);
         //glDrawArrays(GL_POINTS, 0, 1010);
         for (int i = 0; i < (1 / oszlopEgyseg) + 1; i++) {
-            glDrawArrays(GL_LINE_STRIP, i*(1/sorEgyseg + 1), 1/sorEgyseg + 1);
+            glDrawArrays(GL_LINE_STRIP, i * (1 / oszlopEgyseg + 1), 1 / oszlopEgyseg + 1);
         }
 
-        
+
         // BEZIER surface masik iranyba kirajzolas
         glUseProgram(shader_programme);
         glBindVertexArray(vao4);
-        //glDrawArrays(GL_POINTS, 0, 1010);
+        glDrawArrays(GL_POINTS, 0, 1010);
         for (int i = 0; i < (1 / oszlopEgyseg) + 1; i++) {
-            glDrawArrays(GL_LINE_STRIP, i * (1 / sorEgyseg + 1), 1 / sorEgyseg + 1);
+            glDrawArrays(GL_LINE_STRIP, i * (1 / oszlopEgyseg + 1), 1 / oszlopEgyseg + 1);
         }
 
         // háromszögek
         glBindVertexArray(vao5);
-        glDrawArrays(GL_TRIANGLES, 0, 133);
+        glDrawArrays(GL_TRIANGLES, 0, 430);
 
 
 
