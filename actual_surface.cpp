@@ -14,6 +14,31 @@
 #include <math.h>
 #include "gl_utils.h"
 #define GL_LOG_FILE "gl.log"
+#include "imgui.h"
+#include "imgui_impl_dx9.h"
+#include "imgui_impl_win32.h"
+#include <d3d9.h>
+#include <tchar.h>
+#include <locale.h>
+
+
+
+
+//Test
+// Data
+static LPDIRECT3D9              g_pD3D = nullptr;
+static LPDIRECT3DDEVICE9        g_pd3dDevice = nullptr;
+static UINT                     g_ResizeWidth = 0, g_ResizeHeight = 0;
+static D3DPRESENT_PARAMETERS    g_d3dpp = {};
+
+// Forward declarations of helper functions
+bool CreateDeviceD3D(HWND hWnd);
+void CleanupDeviceD3D();
+void ResetDevice();
+LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+
+
+//Test
 
 using namespace std;
 
@@ -23,14 +48,27 @@ int g_gl_height = 960;
 
 int currentPoint = 0;
 int secondcurrentPoint = 0;
+bool grid = true;
+bool triangles = true;
 
 // selected axis x = 0, y = 1, z = 2
 char selectedAxis = 0;
 
 float step = 0.2f;
 
-int oszlop = 5, sor = 5;
+int oszlop = 6, sor = 6;
 
+// FÉNYFORRÁS, SZINE ÉS INTENZITÁSA
+vec3 lightDirection(-1.0f, 1.0f, 1.0f);
+GLfloat lightDirectionArray[3] = { -1.0f, 1.0f, 1.0f };
+
+vec3 lightColor(1.0f, 1.0f, 0.0f);
+GLfloat lightColorArray[3] = { 1.0f, 1.0f, 0.0f };
+
+float lightIntensity = 1.0f;
+bool lightSourceMove = false;
+
+///
 
 GLint dragged = -1;
 int k = 0;
@@ -48,9 +86,11 @@ GLfloat points_color[300] = {};
 // vbo - points vbo
 // vbo2 - points 2 vbo
 // vbo 3, 4 - surface egyik, masik iranyba
-GLuint vbo, vbo2, vbo3, vbo4, vbo_triangle1;
-GLuint points_color_vbo, surface_color_vbo;
-GLuint vao, vao2, vao3, vao4, vao5;
+// vbo triange
+// vbo lightSource
+GLuint vbo, vbo2, vbo3, vbo4, vbo_triangle, vbo_lightSource;
+GLuint points_color_vbo, surface_color_vbo, triangle_color_vbo, lightSource_color_vbo;
+GLuint vao, vao2, vao3, vao4, vao5, vao6;
 
 GLfloat curve_points[5000] = {}; // egyik iranyba a curve-k
 GLfloat curve_points2[5000] = {}; // masik iranyba a curve-k
@@ -58,6 +98,7 @@ GLfloat curve_points2[5000] = {}; // masik iranyba a curve-k
 GLfloat surface_color[5000] = {};
 
 GLfloat surface_triangle[500000] = {};
+GLfloat surface_triangle_colors[500000] = {};
 
 GLFWwindow* g_window = NULL;
 
@@ -119,82 +160,297 @@ void bezierGenerator(GLfloat curve_points[5000], GLfloat surface_color[5000], GL
     }
 }
 
+vec3 calculateNormal(vec3 vector1, vec3 vector2, vec3 vector3) {
+    vec3 newvec1 = vector3 - vector1;
+    vec3 newvec2 = vector2 - vector1;
+    return normalise(cross(newvec1, newvec2));
+}
+
+float calculateLightAngle(vec3 lightDirection, vec3 normal) {
+    return std::acos(dot(normalise(lightDirection),(normalise(normal))));
+}
+
+vec3 calculateColorIntensity(vec3 lightColor, float lightIntensity, float lightAngle) {
+    float intensity = max(0.0f, std::cos(lightAngle));
+    return lightColor * (intensity * lightIntensity);
+}
+
 void triangulization(GLfloat curve_points[5000]) {
     int j = 0;
     int jobb = 1;
     int temp = 0;
     int count = 0;
-    for (int i = 0; i < 10000; i += 6) {
+    if (sor == 4) {
+        for (int i = 0; i < 246; i += 6) {
 
-        surface_triangle[i * 3] = curve_points[j * 3];
-        surface_triangle[i * 3 + 1] = curve_points[j * 3 + 1];
-        surface_triangle[i * 3 + 2] = curve_points[j * 3 + 2];
-        surface_triangle[i * 3 + 3] = curve_points[j * 3 + (1 * 3)];
-        surface_triangle[i * 3 + 4] = curve_points[j * 3 + (1 * 3) + 1];
-        surface_triangle[i * 3 + 5] = curve_points[j * 3 + (1 * 3) + 2];
-        surface_triangle[i * 3 + 6] = curve_points[j * 3 + (9 * 3)];
-        surface_triangle[i * 3 + 7] = curve_points[j * 3 + (9 * 3) + 1];
-        surface_triangle[i * 3 + 8] = curve_points[j * 3 + (9 * 3) + 2];
+            if (i == 36 || i == 78 || i == 120 || i == 162 || i == 204 || i == 246) {
+                j += 1;
+            }
+            else {
+                // alsó háromszögek
 
+                surface_triangle[i * 3] = curve_points[j * 3];
+                surface_triangle[i * 3 + 1] = curve_points[j * 3 + 1];
+                surface_triangle[i * 3 + 2] = curve_points[j * 3 + 2];
+                vec3 vector1(surface_triangle[i*3], surface_triangle[i*3+1], surface_triangle[i*3+2]);
 
+                surface_triangle[i * 3 + 3] = curve_points[j * 3 + (1 * 3)];
+                surface_triangle[i * 3 + 4] = curve_points[j * 3 + (1 * 3) + 1];
+                surface_triangle[i * 3 + 5] = curve_points[j * 3 + (1 * 3) + 2];
+                vec3 vector2(surface_triangle[i*3+3], surface_triangle[i*3+4], surface_triangle[i*3+5]);
 
-        surface_triangle[i * 3 + 9] = curve_points[j * 3 + (9 * 3)];
-        surface_triangle[i * 3 + 10] = curve_points[j * 3 + (9 * 3) + 1];
-        surface_triangle[i * 3 + 11] = curve_points[j * 3 + (9 * 3) + 2];
-        surface_triangle[i * 3 + 12] = curve_points[j * 3 + (10 * 3)];
-        surface_triangle[i * 3 + 13] = curve_points[j * 3 + (10 * 3) + 1];
-        surface_triangle[i * 3 + 14] = curve_points[j * 3 + (10 * 3) + 2];
-        surface_triangle[i * 3 + 15] = curve_points[j * 3 + (1 * 3)];
-        surface_triangle[i * 3 + 16] = curve_points[j * 3 + (1 * 3) + 1];
-        surface_triangle[i * 3 + 17] = curve_points[j * 3 + (1 * 3) + 2];
-        j += 1;
+                surface_triangle[i * 3 + 6] = curve_points[j * 3 + (7 * 3)];
+                surface_triangle[i * 3 + 7] = curve_points[j * 3 + (7 * 3) + 1];
+                surface_triangle[i * 3 + 8] = curve_points[j * 3 + (7 * 3) + 2];
+                vec3 vector3(surface_triangle[i*3+6], surface_triangle[i*3+7], surface_triangle[i*3+8]);
 
+                vec3 normalised = calculateNormal(vector1, vector2, vector3);
 
-        /* if (i >= 19 && i<36) {
-             surface_triangle[i * 3] = curve_points[j * 3 + (3 * 3)];
-             surface_triangle[i * 3 + 1] = curve_points[j * 3 + (3 * 3) + 1];
-             surface_triangle[i * 3 + 2] = curve_points[j * 3 + (3 * 3) + 2];
-             surface_triangle[i * 3 + 3] = curve_points[j * 3];
-             surface_triangle[i * 3 + 4] = curve_points[j * 3 + 1];
-             surface_triangle[i * 3 + 5] = curve_points[j * 3 + 2];
-             surface_triangle[i * 3 + 6] = curve_points[j * 3 + (26 * 3) - temp];
-             surface_triangle[i * 3 + 7] = curve_points[j * 3 + (26 * 3) + 1 - temp];
-             surface_triangle[i * 3 + 8] = curve_points[j * 3 + (26 * 3) + 2 - temp];
-             j += 3;
-             temp -= 3;
-
-                 temp = 0;
-                 cout << "i2:      " << i << endl;
-                 cout << "Bent vagyok te hitvány szar itt is" << endl;
+                // Fényforrás és normálvektor közötti szög számolása
+                float lightAngle = calculateLightAngle(lightDirection, normalised);
+                // Szín intenzitásának kiszámolása
+                vec3 colorIntensity = calculateColorIntensity(lightColor, lightIntensity, lightAngle);
+                surface_triangle_colors[i * 3] = colorIntensity.v[0];
+                surface_triangle_colors[i * 3 + 1] = colorIntensity.v[1];
+                surface_triangle_colors[i * 3 + 2] = colorIntensity.v[2];
+                surface_triangle_colors[i * 3 + 3] = colorIntensity.v[0];
+                surface_triangle_colors[i * 3 + 4] = colorIntensity.v[1];
+                surface_triangle_colors[i * 3 + 5] = colorIntensity.v[2];
+                surface_triangle_colors[i * 3 + 6] = colorIntensity.v[0];
+                surface_triangle_colors[i * 3 + 7] = colorIntensity.v[1];
+                surface_triangle_colors[i * 3 + 8] = colorIntensity.v[2];
 
 
+                // felső háromszögek
 
-     }*/
+                surface_triangle[i * 3 + 9] = curve_points[j * 3 + (7 * 3)];
+                surface_triangle[i * 3 + 10] = curve_points[j * 3 + (7 * 3) + 1];
+                surface_triangle[i * 3 + 11] = curve_points[j * 3 + (7 * 3) + 2];
+                vec3 vector4(surface_triangle[i*3+9], surface_triangle[i * 3 + 10], surface_triangle[i * 3 + 11]);
+
+                surface_triangle[i * 3 + 12] = curve_points[j * 3 + (8 * 3)];
+                surface_triangle[i * 3 + 13] = curve_points[j * 3 + (8 * 3) + 1];
+                surface_triangle[i * 3 + 14] = curve_points[j * 3 + (8 * 3) + 2];
+                vec3 vector5(surface_triangle[i * 3 + 12], surface_triangle[i * 3 + 13], surface_triangle[i * 3 + 14]);
+
+                surface_triangle[i * 3 + 15] = curve_points[j * 3 + (1 * 3)];
+                surface_triangle[i * 3 + 16] = curve_points[j * 3 + (1 * 3) + 1];
+                surface_triangle[i * 3 + 17] = curve_points[j * 3 + (1 * 3) + 2];
+                vec3 vector6(surface_triangle[i * 3 + 15], surface_triangle[i * 3 + 16], surface_triangle[i * 3 + 17]);
+
+                vec3 normalised2 = calculateNormal(vector5, vector4, vector6);
+
+                // Fényforrás és normálvektor közötti szög számolása
+                float lightAngle2 = calculateLightAngle(lightDirection, normalised2);
+                // Szín intenzitásának kiszámolása
+                vec3 colorIntensity2 = calculateColorIntensity(lightColor, lightIntensity, lightAngle2);
+                surface_triangle_colors[i * 3 + 9] = colorIntensity2.v[0];
+                surface_triangle_colors[i * 3 + 10] = colorIntensity2.v[1];
+                surface_triangle_colors[i * 3 + 11] = colorIntensity2.v[2];
+                surface_triangle_colors[i * 3 + 12] = colorIntensity2.v[0];
+                surface_triangle_colors[i * 3 + 13] = colorIntensity2.v[1];
+                surface_triangle_colors[i * 3 + 14] = colorIntensity2.v[2];
+                surface_triangle_colors[i * 3 + 15] = colorIntensity2.v[0];
+                surface_triangle_colors[i * 3 + 16] = colorIntensity2.v[1];
+                surface_triangle_colors[i * 3 + 17] = colorIntensity2.v[2];
+
+                j += 1;
+
+            }
+        }
     }
-    glBindBuffer(GL_ARRAY_BUFFER, vbo_triangle1);
+    if (sor == 5) {
+        for (int i = 0; i < 426; i += 6) {
+
+            if (i == 48 || i == 102 || i == 156 || i == 210 || i == 264 || i == 318 || i == 372 || i == 426) {
+                j += 1;
+            }
+            else {
+                surface_triangle[i * 3] = curve_points[j * 3];
+                surface_triangle[i * 3 + 1] = curve_points[j * 3 + 1];
+                surface_triangle[i * 3 + 2] = curve_points[j * 3 + 2];
+                vec3 vector1(surface_triangle[i * 3], surface_triangle[i * 3 + 1], surface_triangle[i * 3 + 2]);
+
+                surface_triangle[i * 3 + 3] = curve_points[j * 3 + (1 * 3)];
+                surface_triangle[i * 3 + 4] = curve_points[j * 3 + (1 * 3) + 1];
+                surface_triangle[i * 3 + 5] = curve_points[j * 3 + (1 * 3) + 2];
+                vec3 vector2(surface_triangle[i * 3 + 3], surface_triangle[i * 3 + 4], surface_triangle[i * 3 + 5]);
+
+                surface_triangle[i * 3 + 6] = curve_points[j * 3 + (9 * 3)];
+                surface_triangle[i * 3 + 7] = curve_points[j * 3 + (9 * 3) + 1];
+                surface_triangle[i * 3 + 8] = curve_points[j * 3 + (9 * 3) + 2];
+                vec3 vector3(surface_triangle[i * 3 + 6], surface_triangle[i * 3 + 7], surface_triangle[i * 3 + 8]);
+
+                vec3 normalised = calculateNormal(vector1, vector2, vector3);
+
+                // Fényforrás és normálvektor közötti szög számolása
+                float lightAngle = calculateLightAngle(lightDirection, normalised);
+                // Szín intenzitásának kiszámolása
+                vec3 colorIntensity = calculateColorIntensity(lightColor, lightIntensity, lightAngle);
+                surface_triangle_colors[i * 3] = colorIntensity.v[0];
+                surface_triangle_colors[i * 3 + 1] = colorIntensity.v[1];
+                surface_triangle_colors[i * 3 + 2] = colorIntensity.v[2];
+                surface_triangle_colors[i * 3 + 3] = colorIntensity.v[0];
+                surface_triangle_colors[i * 3 + 4] = colorIntensity.v[1];
+                surface_triangle_colors[i * 3 + 5] = colorIntensity.v[2];
+                surface_triangle_colors[i * 3 + 6] = colorIntensity.v[0];
+                surface_triangle_colors[i * 3 + 7] = colorIntensity.v[1];
+                surface_triangle_colors[i * 3 + 8] = colorIntensity.v[2];
+
+
+                // alsó háromszögek
+
+                surface_triangle[i * 3 + 9] = curve_points[j * 3 + (9 * 3)];
+                surface_triangle[i * 3 + 10] = curve_points[j * 3 + (9 * 3) + 1];
+                surface_triangle[i * 3 + 11] = curve_points[j * 3 + (9 * 3) + 2];
+                vec3 vector4(surface_triangle[i * 3 + 9], surface_triangle[i * 3 + 10], surface_triangle[i * 3 + 11]);
+
+                surface_triangle[i * 3 + 12] = curve_points[j * 3 + (10 * 3)];
+                surface_triangle[i * 3 + 13] = curve_points[j * 3 + (10 * 3) + 1];
+                surface_triangle[i * 3 + 14] = curve_points[j * 3 + (10 * 3) + 2];
+                vec3 vector5(surface_triangle[i * 3 + 12], surface_triangle[i * 3 + 13], surface_triangle[i * 3 + 14]);
+
+                surface_triangle[i * 3 + 15] = curve_points[j * 3 + (1 * 3)];
+                surface_triangle[i * 3 + 16] = curve_points[j * 3 + (1 * 3) + 1];
+                surface_triangle[i * 3 + 17] = curve_points[j * 3 + (1 * 3) + 2];
+                vec3 vector6(surface_triangle[i * 3 + 15], surface_triangle[i * 3 + 16], surface_triangle[i * 3 + 17]);
+
+                vec3 normalised2 = calculateNormal(vector5, vector4, vector6);
+
+                // Fényforrás és normálvektor közötti szög számolása
+                float lightAngle2 = calculateLightAngle(lightDirection, normalised2);
+                // Szín intenzitásának kiszámolása
+                vec3 colorIntensity2 = calculateColorIntensity(lightColor, lightIntensity, lightAngle2);
+                surface_triangle_colors[i * 3 + 9] = colorIntensity2.v[0];
+                surface_triangle_colors[i * 3 + 10] = colorIntensity2.v[1];
+                surface_triangle_colors[i * 3 + 11] = colorIntensity2.v[2];
+                surface_triangle_colors[i * 3 + 12] = colorIntensity2.v[0];
+                surface_triangle_colors[i * 3 + 13] = colorIntensity2.v[1];
+                surface_triangle_colors[i * 3 + 14] = colorIntensity2.v[2];
+                surface_triangle_colors[i * 3 + 15] = colorIntensity2.v[0];
+                surface_triangle_colors[i * 3 + 16] = colorIntensity2.v[1];
+                surface_triangle_colors[i * 3 + 17] = colorIntensity2.v[2];
+
+                j += 1;
+
+            }
+        }
+    }
+    if (sor == 6) {
+
+        for (int i = 0; i < 654; i += 6) {
+
+            if (i == 60 || i == 126 || i == 192 || i == 258 || i == 324 || i == 390 || i == 456 || i == 522 || i == 588 || i == 654) {
+                j += 1;
+            }
+            else {
+                surface_triangle[i * 3] = curve_points[j * 3];
+                surface_triangle[i * 3 + 1] = curve_points[j * 3 + 1];
+                surface_triangle[i * 3 + 2] = curve_points[j * 3 + 2];
+                vec3 vector1(surface_triangle[i * 3], surface_triangle[i * 3 + 1], surface_triangle[i * 3 + 2]);
+
+                surface_triangle[i * 3 + 3] = curve_points[j * 3 + (1 * 3)];
+                surface_triangle[i * 3 + 4] = curve_points[j * 3 + (1 * 3) + 1];
+                surface_triangle[i * 3 + 5] = curve_points[j * 3 + (1 * 3) + 2];
+                vec3 vector2(surface_triangle[i * 3 + 3], surface_triangle[i * 3 + 4], surface_triangle[i * 3 + 5]);
+
+                surface_triangle[i * 3 + 6] = curve_points[j * 3 + (11 * 3)];
+                surface_triangle[i * 3 + 7] = curve_points[j * 3 + (11 * 3) + 1];
+                surface_triangle[i * 3 + 8] = curve_points[j * 3 + (11 * 3) + 2];
+                vec3 vector3(surface_triangle[i * 3 + 6], surface_triangle[i * 3 + 7], surface_triangle[i * 3 + 8]);
+
+                vec3 normalised = calculateNormal(vector1, vector2, vector3);
+
+                // Fényforrás és normálvektor közötti szög számolása
+                float lightAngle = calculateLightAngle(lightDirection, normalised);
+                // Szín intenzitásának kiszámolása
+                vec3 colorIntensity = calculateColorIntensity(lightColor, lightIntensity, lightAngle);
+                surface_triangle_colors[i * 3] = colorIntensity.v[0];
+                surface_triangle_colors[i * 3 + 1] = colorIntensity.v[1];
+                surface_triangle_colors[i * 3 + 2] = colorIntensity.v[2];
+                surface_triangle_colors[i * 3 + 3] = colorIntensity.v[0];
+                surface_triangle_colors[i * 3 + 4] = colorIntensity.v[1];
+                surface_triangle_colors[i * 3 + 5] = colorIntensity.v[2];
+                surface_triangle_colors[i * 3 + 6] = colorIntensity.v[0];
+                surface_triangle_colors[i * 3 + 7] = colorIntensity.v[1];
+                surface_triangle_colors[i * 3 + 8] = colorIntensity.v[2];
+
+                // alsó háromszögek
+
+                surface_triangle[i * 3 + 9] = curve_points[j * 3 + (11 * 3)];
+                surface_triangle[i * 3 + 10] = curve_points[j * 3 + (11 * 3) + 1];
+                surface_triangle[i * 3 + 11] = curve_points[j * 3 + (11 * 3) + 2];
+                vec3 vector4(surface_triangle[i * 3 + 9], surface_triangle[i * 3 + 10], surface_triangle[i * 3 + 11]);
+
+                surface_triangle[i * 3 + 12] = curve_points[j * 3 + (12 * 3)];
+                surface_triangle[i * 3 + 13] = curve_points[j * 3 + (12 * 3) + 1];
+                surface_triangle[i * 3 + 14] = curve_points[j * 3 + (12 * 3) + 2];
+                vec3 vector5(surface_triangle[i * 3 + 12], surface_triangle[i * 3 + 13], surface_triangle[i * 3 + 14]);
+
+                surface_triangle[i * 3 + 15] = curve_points[j * 3 + (1 * 3)];
+                surface_triangle[i * 3 + 16] = curve_points[j * 3 + (1 * 3) + 1];
+                surface_triangle[i * 3 + 17] = curve_points[j * 3 + (1 * 3) + 2];
+
+                vec3 vector6(surface_triangle[i * 3 + 15], surface_triangle[i * 3 + 16], surface_triangle[i * 3 + 17]);
+
+                vec3 normalised2 = calculateNormal(vector5, vector4, vector6);
+
+                // Fényforrás és normálvektor közötti szög számolása
+                float lightAngle2 = calculateLightAngle(lightDirection, normalised2);
+                // Szín intenzitásának kiszámolása
+                vec3 colorIntensity2 = calculateColorIntensity(lightColor, lightIntensity, lightAngle2);
+                surface_triangle_colors[i * 3 + 9] = colorIntensity2.v[0];
+                surface_triangle_colors[i * 3 + 10] = colorIntensity2.v[1];
+                surface_triangle_colors[i * 3 + 11] = colorIntensity2.v[2];
+                surface_triangle_colors[i * 3 + 12] = colorIntensity2.v[0];
+                surface_triangle_colors[i * 3 + 13] = colorIntensity2.v[1];
+                surface_triangle_colors[i * 3 + 14] = colorIntensity2.v[2];
+                surface_triangle_colors[i * 3 + 15] = colorIntensity2.v[0];
+                surface_triangle_colors[i * 3 + 16] = colorIntensity2.v[1];
+                surface_triangle_colors[i * 3 + 17] = colorIntensity2.v[2];
+                j += 1;
+
+            }
+        }
+    }
+
+    glBindBuffer(GL_ARRAY_BUFFER, vbo_triangle);
     glBufferData(GL_ARRAY_BUFFER, 50000 * sizeof(GLfloat), surface_triangle, GL_STATIC_DRAW);
+
+    glBindBuffer(GL_ARRAY_BUFFER, triangle_color_vbo);
+    glBufferData(GL_ARRAY_BUFFER, 50000 * sizeof(GLfloat), surface_triangle_colors, GL_STATIC_DRAW);
 }
 
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset) {
-    points[currentPoint * 3 + selectedAxis] += 0.015f * yoffset;
-    points2[secondcurrentPoint * 3 + selectedAxis] += 0.015f * yoffset;
+    if (lightSourceMove) {
+        lightDirectionArray[0 + selectedAxis] += 0.015 * yoffset;
+        lightDirection = { lightDirectionArray[0], lightDirectionArray[1], lightDirectionArray[2] };
 
-    // pontok újraszámolása
-    glBindBuffer(GL_ARRAY_BUFFER, vbo);
-    glBufferData(GL_ARRAY_BUFFER, sor * oszlop * 3 * sizeof(GLfloat), points, GL_STATIC_DRAW);
+        glBindBuffer(GL_ARRAY_BUFFER, vbo_lightSource);
+        glBufferData(GL_ARRAY_BUFFER, 3 * sizeof(GLfloat), lightDirectionArray, GL_STATIC_DRAW);
+    }
 
-    glBindBuffer(GL_ARRAY_BUFFER, vbo2);
-    glBufferData(GL_ARRAY_BUFFER, oszlop * sor * 3 * sizeof(GLfloat), points2, GL_STATIC_DRAW);
+    if (!lightSourceMove) {
+        points[currentPoint * 3 + selectedAxis] += 0.03f * yoffset;
+        points2[secondcurrentPoint * 3 + selectedAxis] += 0.03f * yoffset;
 
-    // bezier felület újraszámolása
-    bezierGenerator(curve_points, surface_color, points);
-    glBindBuffer(GL_ARRAY_BUFFER, vbo3);
-    glBufferData(GL_ARRAY_BUFFER, 3030 * sizeof(GLfloat), curve_points, GL_STATIC_DRAW);
+        // pontok újraszámolása
+        glBindBuffer(GL_ARRAY_BUFFER, vbo);
+        glBufferData(GL_ARRAY_BUFFER, sor * oszlop * 3 * sizeof(GLfloat), points, GL_STATIC_DRAW);
 
-    // bezier felület újraszámolása
-    bezierGenerator(curve_points2, surface_color, points2);
-    glBindBuffer(GL_ARRAY_BUFFER, vbo4);
-    glBufferData(GL_ARRAY_BUFFER, 3030 * sizeof(GLfloat), curve_points2, GL_STATIC_DRAW);
+        glBindBuffer(GL_ARRAY_BUFFER, vbo2);
+        glBufferData(GL_ARRAY_BUFFER, oszlop * sor * 3 * sizeof(GLfloat), points2, GL_STATIC_DRAW);
+
+        // bezier felület újraszámolása
+        bezierGenerator(curve_points, surface_color, points);
+        glBindBuffer(GL_ARRAY_BUFFER, vbo3);
+        glBufferData(GL_ARRAY_BUFFER, 3030 * sizeof(GLfloat), curve_points, GL_STATIC_DRAW);
+
+        // bezier felület újraszámolása
+        bezierGenerator(curve_points2, surface_color, points2);
+        glBindBuffer(GL_ARRAY_BUFFER, vbo4);
+        glBufferData(GL_ARRAY_BUFFER, 3030 * sizeof(GLfloat), curve_points2, GL_STATIC_DRAW);
+    }
 
     // háromszögelés újraszámolása
     triangulization(curve_points);
@@ -202,37 +458,290 @@ void scroll_callback(GLFWwindow* window, double xoffset, double yoffset) {
 }
 
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods) {
-    if (key == GLFW_KEY_KP_ADD && action == GLFW_PRESS) {
-        if (currentPoint < sor * oszlop) {
-            currentPoint++;
-        }
-        else {
-            currentPoint = 0;
-        }
-        int i = currentPoint;
-        for (int j = 0; j < oszlop * sor; j++)
-        {
-            if ((points[i * 3] == points2[j * 3]) && (points[i * 3 + 1] == points2[j * 3 + 1]) && (points[i * 3 + 2] == points2[j * 3 + 2]))
-            {
-                secondcurrentPoint = j;
-                break;
+    if (key == GLFW_KEY_L && action == GLFW_PRESS) {
+        lightSourceMove = !lightSourceMove;
+    }
+    else {
+        if (!lightSourceMove) {
+            if (key == GLFW_KEY_KP_ADD && action == GLFW_PRESS) {
+                if (currentPoint < sor * oszlop) {
+                    currentPoint++;
+                }
+                else {
+                    currentPoint = 0;
+                }
+                int i = currentPoint;
+                for (int j = 0; j < oszlop * sor; j++)
+                {
+                    if ((points[i * 3] == points2[j * 3]) && (points[i * 3 + 1] == points2[j * 3 + 1]) && (points[i * 3 + 2] == points2[j * 3 + 2]))
+                    {
+                        secondcurrentPoint = j;
+                        break;
+                    }
+                }
             }
         }
-    }
-    //cout << endl << currentPoint << " " << secondcurrentPoint;
-    if (key == GLFW_KEY_X && action == GLFW_PRESS) {
-        selectedAxis = 0;
-    }
-    if (key == GLFW_KEY_Y && action == GLFW_PRESS) {
-        selectedAxis = 1;
-    }
-    if (key == GLFW_KEY_Z && action == GLFW_PRESS) {
-        selectedAxis = 2;
+        //cout << endl << currentPoint << " " << secondcurrentPoint;
+        if (key == GLFW_KEY_X && action == GLFW_PRESS) {
+            selectedAxis = 0;
+        }
+        if (key == GLFW_KEY_Y && action == GLFW_PRESS) {
+            selectedAxis = 1;
+        }
+        if (key == GLFW_KEY_Z && action == GLFW_PRESS) {
+            selectedAxis = 2;
+        }
     }
 }
 
+// Helper functions
+
+bool CreateDeviceD3D(HWND hWnd)
+{
+    if ((g_pD3D = Direct3DCreate9(D3D_SDK_VERSION)) == nullptr)
+        return false;
+
+    // Create the D3DDevice
+    ZeroMemory(&g_d3dpp, sizeof(g_d3dpp));
+    g_d3dpp.Windowed = TRUE;
+    g_d3dpp.SwapEffect = D3DSWAPEFFECT_DISCARD;
+    g_d3dpp.BackBufferFormat = D3DFMT_UNKNOWN; // Need to use an explicit format with alpha if needing per-pixel alpha composition.
+    g_d3dpp.EnableAutoDepthStencil = TRUE;
+    g_d3dpp.AutoDepthStencilFormat = D3DFMT_D16;
+    g_d3dpp.PresentationInterval = D3DPRESENT_INTERVAL_ONE;           // Present with vsync
+    //g_d3dpp.PresentationInterval = D3DPRESENT_INTERVAL_IMMEDIATE;   // Present without vsync, maximum unthrottled framerate
+    if (g_pD3D->CreateDevice(D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, hWnd, D3DCREATE_HARDWARE_VERTEXPROCESSING, &g_d3dpp, &g_pd3dDevice) < 0)
+        return false;
+
+    return true;
+}
+
+void CleanupDeviceD3D()
+{
+    if (g_pd3dDevice) { g_pd3dDevice->Release(); g_pd3dDevice = nullptr; }
+    if (g_pD3D) { g_pD3D->Release(); g_pD3D = nullptr; }
+}
+
+void ResetDevice()
+{
+    ImGui_ImplDX9_InvalidateDeviceObjects();
+    HRESULT hr = g_pd3dDevice->Reset(&g_d3dpp);
+    if (hr == D3DERR_INVALIDCALL)
+        IM_ASSERT(0);
+    ImGui_ImplDX9_CreateDeviceObjects();
+}
+
+// Forward declare message handler from imgui_impl_win32.cpp
+extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+
+// Win32 message handler
+// You can read the io.WantCaptureMouse, io.WantCaptureKeyboard flags to tell if dear imgui wants to use your inputs.
+// - When io.WantCaptureMouse is true, do not dispatch mouse input data to your main application, or clear/overwrite your copy of the mouse data.
+// - When io.WantCaptureKeyboard is true, do not dispatch keyboard input data to your main application, or clear/overwrite your copy of the keyboard data.
+// Generally you may always pass all inputs to dear imgui, and hide them from your application based on those two flags.
+LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
+{
+    if (ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam))
+        return true;
+
+    switch (msg)
+    {
+    case WM_SIZE:
+        if (wParam == SIZE_MINIMIZED)
+            return 0;
+        g_ResizeWidth = (UINT)LOWORD(lParam); // Queue resize
+        g_ResizeHeight = (UINT)HIWORD(lParam);
+        return 0;
+    case WM_SYSCOMMAND:
+        if ((wParam & 0xfff0) == SC_KEYMENU) // Disable ALT application menu
+            return 0;
+        break;
+    case WM_DESTROY:
+        ::PostQuitMessage(0);
+        return 0;
+    }
+    return ::DefWindowProcW(hWnd, msg, wParam, lParam);
+}
 
 int main() {
+
+
+    // Create application window
+//ImGui_ImplWin32_EnableDpiAwareness();
+    WNDCLASSEXW wc = { sizeof(wc), CS_CLASSDC, WndProc, 0L, 0L, GetModuleHandle(nullptr), nullptr, nullptr, nullptr, nullptr, L"ImGui Example", nullptr };
+    ::RegisterClassExW(&wc);
+    HWND hwnd = ::CreateWindowW(wc.lpszClassName, L"Dear ImGui DirectX9 Example", WS_OVERLAPPEDWINDOW, 100, 100, 800, 800, nullptr, nullptr, wc.hInstance, nullptr);
+
+    // Initialize Direct3D
+    if (!CreateDeviceD3D(hwnd))
+    {
+        CleanupDeviceD3D();
+        ::UnregisterClassW(wc.lpszClassName, wc.hInstance);
+        return 1;
+    }
+
+    // Show the window
+    ::ShowWindow(hwnd, SW_SHOWDEFAULT);
+    ::UpdateWindow(hwnd);
+
+    // Setup Dear ImGui context
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGuiIO& io = ImGui::GetIO(); (void)io;
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
+
+    // Setup Dear ImGui style
+    ImGui::StyleColorsDark();
+    //ImGui::StyleColorsLight();
+
+    // Setup Platform/Renderer backends
+    ImGui_ImplWin32_Init(hwnd);
+    ImGui_ImplDX9_Init(g_pd3dDevice);
+
+
+
+
+    // Load Fonts
+    // - If no fonts are loaded, dear imgui will use the default font. You can also load multiple fonts and use ImGui::PushFont()/PopFont() to select them.
+    // - AddFontFromFileTTF() will return the ImFont* so you can store it if you need to select the font among multiple.
+    // - If the file cannot be loaded, the function will return a nullptr. Please handle those errors in your application (e.g. use an assertion, or display an error and quit).
+    // - The fonts will be rasterized at a given size (w/ oversampling) and stored into a texture when calling ImFontAtlas::Build()/GetTexDataAsXXXX(), which ImGui_ImplXXXX_NewFrame below will call.
+    // - Use '#define IMGUI_ENABLE_FREETYPE' in your imconfig file to use Freetype for higher quality font rendering.
+    // - Read 'docs/FONTS.md' for more instructions and details.
+    // - Remember that in C/C++ if you want to include a backslash \ in a string literal you need to write a double backslash \\ !
+    //io.Fonts->AddFontDefault();
+    //io.Fonts->AddFontFromFileTTF("c:\\Windows\\Fonts\\segoeui.ttf", 18.0f);
+    //io.Fonts->AddFontFromFileTTF("../../misc/fonts/DroidSans.ttf", 16.0f);
+    //io.Fonts->AddFontFromFileTTF("../../misc/fonts/Roboto-Medium.ttf", 16.0f);
+    //io.Fonts->AddFontFromFileTTF("../../misc/fonts/Cousine-Regular.ttf", 15.0f);
+    //ImFont* font = io.Fonts->AddFontFromFileTTF("c:\\Windows\\Fonts\\ArialUni.ttf", 18.0f, nullptr, io.Fonts->GetGlyphRangesJapanese());
+    //IM_ASSERT(font != nullptr);
+
+    // Our state
+    bool show_demo_window = false;
+    bool show_another_window = false;
+
+    ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
+
+    // Main loop
+    bool done = false;
+    while (!done)
+    {
+        // Poll and handle messages (inputs, window resize, etc.)
+        // See the WndProc() function below for our to dispatch events to the Win32 backend.
+        MSG msg;
+        while (::PeekMessage(&msg, nullptr, 0U, 0U, PM_REMOVE))
+        {
+            ::TranslateMessage(&msg);
+            ::DispatchMessage(&msg);
+            if (msg.message == WM_QUIT)
+                done = true;
+        }
+        if (done)
+            break;
+
+        // Handle window resize (we don't resize directly in the WM_SIZE handler)
+        if (g_ResizeWidth != 0 && g_ResizeHeight != 0)
+        {
+            g_d3dpp.BackBufferWidth = g_ResizeWidth;
+            g_d3dpp.BackBufferHeight = g_ResizeHeight;
+            g_ResizeWidth = g_ResizeHeight = 0;
+            ResetDevice();
+        }
+
+        // Start the Dear ImGui frame
+        ImGui_ImplDX9_NewFrame();
+        ImGui_ImplWin32_NewFrame();
+        ImGui::NewFrame();
+
+        // 1. Show the big demo window (Most of the sample code is in ImGui::ShowDemoWindow()! You can browse its code to learn more about Dear ImGui!).
+        if (show_demo_window)
+            ImGui::ShowDemoWindow(&show_demo_window);
+
+        // 2. Show a simple window that we create ourselves. We use a Begin/End pair to create a named window.
+        {
+            static float f = 0.0f;
+            static int counter = 0;
+            static int sor_oszlop = 5;
+
+            ImGui::Begin("Hello Grafika!");                          // Create a window called "Hello, world!" and append into it.
+            ImGui::Text("Choose all parameters wisely summoner!\n You won't have the possibility to do it later!!");               // Display some text (you can use a format strings too)
+            //ImGui::Checkbox("Demo Window", &show_demo_window);      // Edit bools storing our window open/close state
+            //ImGui::Checkbox("Another Window", &show_another_window);
+
+
+
+            ImGui::SliderInt("Sor X Oszlop", &sor_oszlop, 4, 6);
+            ImGui::Checkbox("Show grid:", &grid);
+            ImGui::Checkbox("Show triangles:", &triangles);
+
+            oszlop = sor_oszlop;
+            sor = sor_oszlop;
+            oszlopEgyseg = 1 / ((float)(oszlop - 1) * 2);
+            sorEgyseg = 1 / ((float)(sor - 1) * 2);
+
+
+            //ImGui::SliderFloat("float", &f, 0.0f, 1.0f);            // Edit 1 float using a slider from 0.0f to 1.0f
+            //ImGui::ColorEdit3("clear color", (float*)&clear_color); // Edit 3 floats representing a color
+
+         /*   if (ImGui::Button("Button"))                            // Buttons return true when clicked (most widgets return true when edited/activated)
+                counter++;
+            ImGui::SameLine();
+            ImGui::Text("counter = %d", counter);
+
+            ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);*/
+
+
+            //
+
+            //
+
+            ImGui::End();
+        }
+
+        // 3. Show another simple window.
+        if (show_another_window)
+        {
+            ImGui::Begin("Another Window", &show_another_window);   // Pass a pointer to our bool variable (the window will have a closing button that will clear the bool when clicked)
+            ImGui::Text("Hello from another window!");
+            if (ImGui::Button("Close Me"))
+                show_another_window = false;
+            ImGui::End();
+        }
+
+        // Rendering
+        ImGui::EndFrame();
+        g_pd3dDevice->SetRenderState(D3DRS_ZENABLE, FALSE);
+        g_pd3dDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+        g_pd3dDevice->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
+        D3DCOLOR clear_col_dx = D3DCOLOR_RGBA((int)(clear_color.x * clear_color.w * 255.0f), (int)(clear_color.y * clear_color.w * 255.0f), (int)(clear_color.z * clear_color.w * 255.0f), (int)(clear_color.w * 255.0f));
+        g_pd3dDevice->Clear(0, nullptr, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, clear_col_dx, 1.0f, 0);
+        if (g_pd3dDevice->BeginScene() >= 0)
+        {
+            ImGui::Render();
+            ImGui_ImplDX9_RenderDrawData(ImGui::GetDrawData());
+            g_pd3dDevice->EndScene();
+        }
+        HRESULT result = g_pd3dDevice->Present(nullptr, nullptr, nullptr, nullptr);
+
+        // Handle loss of D3D9 device
+        if (result == D3DERR_DEVICELOST && g_pd3dDevice->TestCooperativeLevel() == D3DERR_DEVICENOTRESET)
+            ResetDevice();
+    }
+
+    ImGui_ImplDX9_Shutdown();
+    ImGui_ImplWin32_Shutdown();
+    ImGui::DestroyContext();
+
+    CleanupDeviceD3D();
+    ::DestroyWindow(hwnd);
+    ::UnregisterClassW(wc.lpszClassName, wc.hInstance);
+
+    //
+
+
+
     const GLubyte* renderer;
     const GLubyte* version;
 
@@ -307,19 +816,44 @@ int main() {
 
 
     // SHADERS
-    
+
+    // fényforrás
+    glGenBuffers(1, &vbo_lightSource);
+    glBindBuffer(GL_ARRAY_BUFFER, vbo_lightSource);
+    glBufferData(GL_ARRAY_BUFFER, 3 * sizeof(GLfloat), lightDirectionArray, GL_STATIC_DRAW);
+
+    glGenBuffers(1, &lightSource_color_vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, lightSource_color_vbo);
+    glBufferData(GL_ARRAY_BUFFER, 3 * sizeof(GLfloat), lightColorArray, GL_STATIC_DRAW);
+
+    glGenVertexArrays(1, &vao6);
+    glBindVertexArray(vao6);
+    glEnableVertexAttribArray(0);
+    glEnableVertexAttribArray(1);
+
+    glBindBuffer(GL_ARRAY_BUFFER, vbo_lightSource);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, NULL);
+    glBindBuffer(GL_ARRAY_BUFFER, lightSource_color_vbo);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, NULL);
+
     // háromszögelés
-    glGenBuffers(1, &vbo_triangle1);
-    glBindBuffer(GL_ARRAY_BUFFER, vbo_triangle1);
+    glGenBuffers(1, &vbo_triangle);
+    glBindBuffer(GL_ARRAY_BUFFER, vbo_triangle);
     glBufferData(GL_ARRAY_BUFFER, 50000 * sizeof(GLfloat), surface_triangle, GL_STATIC_DRAW);
+
+    glGenBuffers(1, &triangle_color_vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, triangle_color_vbo);
+    glBufferData(GL_ARRAY_BUFFER, 50000 * sizeof(GLfloat), surface_triangle_colors, GL_STATIC_DRAW);
 
     glGenVertexArrays(1, &vao5);
     glBindVertexArray(vao5);
     glEnableVertexAttribArray(0);
+    glEnableVertexAttribArray(1);
 
-    glBindBuffer(GL_ARRAY_BUFFER, vbo_triangle1);
+    glBindBuffer(GL_ARRAY_BUFFER, vbo_triangle);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, NULL);
-
+    glBindBuffer(GL_ARRAY_BUFFER, triangle_color_vbo);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, NULL);
 
     // points 1
     glGenBuffers(1, &vbo);
@@ -481,16 +1015,16 @@ int main() {
     /*--------------------------create camera matrices----------------------------*/
    /* create PROJECTION MATRIX */
    // input variables
-    float near = 0.1f;                                   // clipping plane
-    float far = 100.0f;                                 // clipping plane
+    float mynear = 0.1f;                                   // clipping plane
+    float myfar = 100.0f;                                 // clipping plane
     float fov = 67.0f * ONE_DEG_IN_RAD;                 // convert 67 degrees to radians
     float aspect = (float)g_gl_width / (float)g_gl_height; // aspect ratio
     // matrix components
     float inverse_range = 1.0f / tan(fov * 0.5f);
     float Sx = inverse_range / aspect;
     float Sy = inverse_range;
-    float Sz = -(far + near) / (far - near);
-    float Pz = -(2.0f * far * near) / (far - near);
+    float Sz = -(myfar + mynear) / (myfar - mynear);
+    float Pz = -(2.0f * myfar * mynear) / (myfar - mynear);
     GLfloat proj_mat[] = { Sx, 0.0f, 0.0f, 0.0f, 0.0f, Sy, 0.0f, 0.0f, 0.0f, 0.0f, Sz, -1.0f, 0.0f, 0.0f, Pz, 0.0f }; // PR matrix
 
     /* create VIEW MATRIX */
@@ -535,7 +1069,6 @@ int main() {
     float speed = 1.0f; // move at 1 unit per second
     float last_position = 0.0f; // pozicio meg skalazas
 
-
     glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
     while (!glfwWindowShouldClose(g_window)) {
 
@@ -571,21 +1104,23 @@ int main() {
         // POINTS 1
         glBindVertexArray(vao);
         //glDrawArrays(GL_POINTS, 0, x * y);
-        for (int i = 0; i <= sor; i++) {
-            glDrawArrays(GL_LINE_STRIP, i * oszlop, oszlop);
+        if (grid) {
+            for (int i = 0; i <= sor; i++) {
+                glDrawArrays(GL_LINE_STRIP, i * oszlop, oszlop);
+            }
+
+            glDrawArrays(GL_POINTS, currentPoint, 1);
+
+            // POINTS 2
+            glBindVertexArray(vao2);
+            //glDrawArrays(GL_POINTS, 0, x * y);
+            for (int i = 0; i <= oszlop; i++) {
+                glDrawArrays(GL_LINE_STRIP, i * sor, sor);
+            }
+
+
         }
-
-        glDrawArrays(GL_POINTS, currentPoint, 1);
-
-        // POINTS 2
-        glBindVertexArray(vao2);
-        //glDrawArrays(GL_POINTS, 0, x * y);
-        for (int i = 0; i <= oszlop; i++) {
-            glDrawArrays(GL_LINE_STRIP, i * sor, sor);
-        }
-
         glPointSize(3.0f);
-
         // BEZIER surface egyik iranyba kirajzolas
         glUseProgram(shader_programme);
         glBindVertexArray(vao3);
@@ -598,15 +1133,29 @@ int main() {
         // BEZIER surface masik iranyba kirajzolas
         glUseProgram(shader_programme);
         glBindVertexArray(vao4);
-        glDrawArrays(GL_POINTS, 0, 1010);
+        if (sor == 4) {
+            glDrawArrays(GL_POINTS, 0, 49);
+        }
+        if (sor == 5) {
+            glDrawArrays(GL_POINTS, 0, 81);
+        }
+        if (sor == 6) {
+            glDrawArrays(GL_POINTS, 0, 121);
+        }
         for (int i = 0; i < (1 / oszlopEgyseg) + 1; i++) {
             glDrawArrays(GL_LINE_STRIP, i * (1 / oszlopEgyseg + 1), 1 / oszlopEgyseg + 1);
         }
 
         // háromszögek
         glBindVertexArray(vao5);
-        glDrawArrays(GL_TRIANGLES, 0, 430);
+        if (triangles) {
+            glDrawArrays(GL_TRIANGLES, 0, 700);
+        }
 
+        // fényforrás
+        glBindVertexArray(vao6);
+        glPointSize(20.0f);
+        glDrawArrays(GL_POINTS, 0, 1);
 
 
         // update other events like input handling
@@ -676,7 +1225,6 @@ int main() {
 
         glfwSwapBuffers(g_window);
     }
-
 
     glfwTerminate();
     return 0;
