@@ -82,6 +82,18 @@ GLfloat points[300] = {};
 GLfloat points2[300] = {};
 GLfloat points_color[300] = {};
 
+// axis vertices and color
+GLfloat axes_vertices[18] = {};
+
+GLfloat axes_colors[18] = {
+        0.0f, 1.0f, 0.0f,  // Green (x-axis)
+        0.0f, 1.0f, 0.0f,  // Green (x-axis)
+        1.0f, 0.0f, 0.0f,  // Red (y-axis)
+        1.0f, 0.0f, 0.0f,  // Red (y-axis)
+        0.0f, 0.0f, 1.0f,  // Blue (z-axis)
+        0.0f, 0.0f, 1.0f   // Blue (z-axis)
+};
+
 
 // vbo - points vbo
 // vbo2 - points 2 vbo
@@ -89,13 +101,17 @@ GLfloat points_color[300] = {};
 // vbo triange
 // vbo lightSource
 GLuint vbo, vbo2, vbo3, vbo4, vbo_triangle, vbo_lightSource;
-GLuint points_color_vbo, surface_color_vbo, triangle_color_vbo, lightSource_color_vbo;
+GLuint points_color_vbo, curve_color_vbo, triangle_color_vbo, lightSource_color_vbo;
 GLuint vao, vao2, vao3, vao4, vao5, vao6;
+
+// axes vbos vao
+GLuint axes_vbo, axes_color_vbo, axes_vao;
+
 
 GLfloat curve_points[5000] = {}; // egyik iranyba a curve-k
 GLfloat curve_points2[5000] = {}; // masik iranyba a curve-k
 
-GLfloat surface_color[5000] = {};
+GLfloat curve_color[5000] = {};
 
 GLfloat surface_triangle[500000] = {};
 GLfloat surface_triangle_colors[500000] = {};
@@ -128,7 +144,7 @@ float sorEgyseg = 1 / ((float)(sor - 1) * 2);
 
 float epsilon = 0.0001;
 
-void bezierGenerator(GLfloat curve_points[5000], GLfloat surface_color[5000], GLfloat points[]) {
+void bezierGenerator(GLfloat curve_points[5000], GLfloat curve_color[5000], GLfloat points[]) {
     int k = 0;
     int curve_i = 0;
     for (float u = 0; u + epsilon < oszlopEgyseg * (oszlop * 2 - 1); u += oszlopEgyseg) {
@@ -151,9 +167,10 @@ void bezierGenerator(GLfloat curve_points[5000], GLfloat surface_color[5000], GL
             curve_points[curve_i * 3 + 1] = Beziery;
             curve_points[curve_i * 3 + 2] = Bezierz;
 
-            surface_color[curve_i * 3] = 0.5f;
-            surface_color[curve_i * 3 + 1] = 0.0f;
-            surface_color[curve_i * 3 + 2] = 1.0f;
+            // minden curve szürke
+            curve_color[curve_i * 3] = 0.5f;
+            curve_color[curve_i * 3 + 1] = 0.5f;
+            curve_color[curve_i * 3 + 2] = 0.5f;
 
             curve_i++;
         }
@@ -423,7 +440,7 @@ void triangulization(GLfloat curve_points[5000]) {
 
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset) {
     if (lightSourceMove) {
-        lightDirectionArray[0 + selectedAxis] += 0.015 * yoffset;
+        lightDirectionArray[0 + selectedAxis] += 0.03 * yoffset;
         lightDirection = { lightDirectionArray[0], lightDirectionArray[1], lightDirectionArray[2] };
 
         glBindBuffer(GL_ARRAY_BUFFER, vbo_lightSource);
@@ -431,8 +448,19 @@ void scroll_callback(GLFWwindow* window, double xoffset, double yoffset) {
     }
 
     if (!lightSourceMove) {
-        points[currentPoint * 3 + selectedAxis] += 0.03f * yoffset;
-        points2[secondcurrentPoint * 3 + selectedAxis] += 0.03f * yoffset;
+        points[currentPoint * 3 + selectedAxis] += 0.02f * yoffset;
+        points2[secondcurrentPoint * 3 + selectedAxis] += 0.02f * yoffset;
+
+        // axis recalc
+        axes_vertices[0] = axes_vertices[6] = axes_vertices[9] = axes_vertices[12] = axes_vertices[15] = points[currentPoint * 3];
+        axes_vertices[3] = points[currentPoint * 3] + 0.3; // x koordinata differencia: 0.3 -> x tengely 0.3 hosszu
+        axes_vertices[1] = axes_vertices[4] = axes_vertices[7] = axes_vertices[13] = axes_vertices[16] = points[currentPoint * 3 + 1];
+        axes_vertices[10] = points[currentPoint * 3 + 1] + 0.3; // y koordinata differencia: 0.3 -> y tengely 0.3 hosszu
+        axes_vertices[2] = axes_vertices[5] = axes_vertices[8] = axes_vertices[11] = axes_vertices[14] = points[currentPoint * 3 + 2];
+        axes_vertices[17] = points[currentPoint * 3 + 2] + 0.3; // z koordinata differencia: 0.3 -> z tengely 0.3 hosszu
+
+        glBindBuffer(GL_ARRAY_BUFFER, axes_vbo);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(axes_vertices), axes_vertices, GL_STATIC_DRAW);
 
         // pontok újraszámolása
         glBindBuffer(GL_ARRAY_BUFFER, vbo);
@@ -442,12 +470,12 @@ void scroll_callback(GLFWwindow* window, double xoffset, double yoffset) {
         glBufferData(GL_ARRAY_BUFFER, oszlop * sor * 3 * sizeof(GLfloat), points2, GL_STATIC_DRAW);
 
         // bezier felület újraszámolása
-        bezierGenerator(curve_points, surface_color, points);
+        bezierGenerator(curve_points, curve_color, points);
         glBindBuffer(GL_ARRAY_BUFFER, vbo3);
         glBufferData(GL_ARRAY_BUFFER, 3030 * sizeof(GLfloat), curve_points, GL_STATIC_DRAW);
 
         // bezier felület újraszámolása
-        bezierGenerator(curve_points2, surface_color, points2);
+        bezierGenerator(curve_points2, curve_color, points2);
         glBindBuffer(GL_ARRAY_BUFFER, vbo4);
         glBufferData(GL_ARRAY_BUFFER, 3030 * sizeof(GLfloat), curve_points2, GL_STATIC_DRAW);
     }
@@ -464,14 +492,14 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
     else {
         if (!lightSourceMove) {
             if (key == GLFW_KEY_KP_ADD && action == GLFW_PRESS) {
-                if (currentPoint < sor * oszlop) {
+                if (currentPoint < (sor * oszlop) - 1) {
                     currentPoint++;
                 }
                 else {
                     currentPoint = 0;
                 }
                 int i = currentPoint;
-                for (int j = 0; j < oszlop * sor; j++)
+                for (int j = 0; j < (oszlop * sor)-1; j++)
                 {
                     if ((points[i * 3] == points2[j * 3]) && (points[i * 3 + 1] == points2[j * 3 + 1]) && (points[i * 3 + 2] == points2[j * 3 + 2]))
                     {
@@ -479,6 +507,16 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
                         break;
                     }
                 }
+                // axis recalc
+                axes_vertices[0] = axes_vertices[6] = axes_vertices[9] = axes_vertices[12] = axes_vertices[15] = points[currentPoint * 3];
+                axes_vertices[3] = points[currentPoint * 3] + 0.3; // x koordinata differencia: 0.3 -> x tengely 0.3 hosszu
+                axes_vertices[1] = axes_vertices[4] = axes_vertices[7] = axes_vertices[13] = axes_vertices[16] = points[currentPoint * 3 + 1];
+                axes_vertices[10] = points[currentPoint * 3 + 1] + 0.3; // y koordinata differencia: 0.3 -> y tengely 0.3 hosszu
+                axes_vertices[2] = axes_vertices[5] = axes_vertices[8] = axes_vertices[11] = axes_vertices[14] = points[currentPoint * 3 + 2];
+                axes_vertices[17] = points[currentPoint * 3 + 2] + 0.3; // z koordinata differencia: 0.3 -> z tengely 0.3 hosszu
+
+                glBindBuffer(GL_ARRAY_BUFFER, axes_vbo);
+                glBufferData(GL_ARRAY_BUFFER, sizeof(axes_vertices), axes_vertices, GL_STATIC_DRAW);
             }
         }
         //cout << endl << currentPoint << " " << secondcurrentPoint;
@@ -753,8 +791,8 @@ int main() {
         for (int i = 0; i < oszlop; i++)
         {
             points_color[k * 3] = 1.0f;
-            points_color[k * 3 + 1] = 0.5f;
-            points_color[k * 3 + 2] = 0.0f;
+            points_color[k * 3 + 1] = 1.0f;
+            points_color[k * 3 + 2] = 1.0f;
 
             points[k * 3] = -0.5f + (i * step);
             points[k * 3 + 1] = 0.0f + (1.0f / sor) + (j * 0.2f);
@@ -810,8 +848,8 @@ int main() {
     glDepthFunc(GL_LESS);
 
     // BEZIER FELÜLET KISZÁMOLÁSA, CURVE_POINTS-ba tároljuk ezeket
-    bezierGenerator(curve_points, surface_color, points);
-    bezierGenerator(curve_points2, surface_color, points2);
+    bezierGenerator(curve_points, curve_color, points);
+    bezierGenerator(curve_points2, curve_color, points2);
     triangulization(curve_points);
 
 
@@ -898,9 +936,9 @@ int main() {
     glBindBuffer(GL_ARRAY_BUFFER, vbo3);
     glBufferData(GL_ARRAY_BUFFER, 3030 * sizeof(GLfloat), curve_points, GL_STATIC_DRAW);
 
-    glGenBuffers(1, &surface_color_vbo);
-    glBindBuffer(GL_ARRAY_BUFFER, surface_color_vbo);
-    glBufferData(GL_ARRAY_BUFFER, 3030 * sizeof(GLfloat), surface_color, GL_STATIC_DRAW);
+    glGenBuffers(1, &curve_color_vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, curve_color_vbo);
+    glBufferData(GL_ARRAY_BUFFER, 3030 * sizeof(GLfloat), curve_color, GL_STATIC_DRAW);
 
     glGenVertexArrays(1, &vao3);
     glBindVertexArray(vao3);
@@ -909,7 +947,7 @@ int main() {
 
     glBindBuffer(GL_ARRAY_BUFFER, vbo3);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, NULL);
-    glBindBuffer(GL_ARRAY_BUFFER, surface_color_vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, curve_color_vbo);
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, NULL);
 
     // surface - masik irany 
@@ -918,9 +956,9 @@ int main() {
     glBindBuffer(GL_ARRAY_BUFFER, vbo4);
     glBufferData(GL_ARRAY_BUFFER, 3030 * sizeof(GLfloat), curve_points2, GL_STATIC_DRAW);
 
-    glGenBuffers(1, &surface_color_vbo);
-    glBindBuffer(GL_ARRAY_BUFFER, surface_color_vbo);
-    glBufferData(GL_ARRAY_BUFFER, 3030 * sizeof(GLfloat), surface_color, GL_STATIC_DRAW);
+    glGenBuffers(1, &curve_color_vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, curve_color_vbo);
+    glBufferData(GL_ARRAY_BUFFER, 3030 * sizeof(GLfloat), curve_color, GL_STATIC_DRAW);
 
     glGenVertexArrays(1, &vao4);
     glBindVertexArray(vao4);
@@ -929,7 +967,7 @@ int main() {
 
     glBindBuffer(GL_ARRAY_BUFFER, vbo4);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, NULL);
-    glBindBuffer(GL_ARRAY_BUFFER, surface_color_vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, curve_color_vbo);
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, NULL);
 
     // -----------------------//
@@ -963,25 +1001,14 @@ int main() {
         "   gl_Position = proj * view * vec4(vertex_position, 1.0);"
         "}";
 
-    GLfloat axes_vertices[] = {
-        -0.6f, 0.0f, 0.0f,  // Start of x-axis
-        0.6f, 0.0f, 0.0f,  // End of x-axis
-        -0.6f, 0.0f, 0.0f,  // Start of y-axis
-        -0.2f, 1.0f, 0.0f,  // End of y-axis
-        -0.6f, 0.0f, 0.0f,  // Start of z-axis
-        -0.4f, 0.0f, 1.0f   // End of z-axis
-    };
+    axes_vertices[0] = axes_vertices[6] = axes_vertices[9] = axes_vertices[12] = axes_vertices[15] = points[currentPoint * 3];
+    axes_vertices[3] = points[currentPoint * 3] + 0.3; // x koordinata differencia: 0.3 -> x tengely 0.3 hosszu
+    axes_vertices[1] = axes_vertices[4] = axes_vertices[7] = axes_vertices[13] = axes_vertices[16] = points[currentPoint * 3 + 1];
+    axes_vertices[10] = points[currentPoint * 3 + 1] + 0.3; // y koordinata differencia: 0.3 -> y tengely 0.3 hosszu
+    axes_vertices[2] = axes_vertices[5] = axes_vertices[8] = axes_vertices[11] = axes_vertices[14] = points[currentPoint * 3 + 2];
+    axes_vertices[17] = points[currentPoint * 3 + 1], points[currentPoint * 3 + 2] + 0.3; // z koordinata differencia: 0.3 -> z tengely 0.3 hosszu
 
-    GLfloat axes_colors[] = {
-        0.0f, 1.0f, 0.0f,  // Green (x-axis)
-        0.0f, 1.0f, 0.0f,  // Green (x-axis)
-        1.0f, 0.0f, 0.0f,  // Red (y-axis)
-        1.0f, 0.0f, 0.0f,  // Red (y-axis)
-        0.0f, 0.0f, 1.0f,  // Blue (z-axis)
-        0.0f, 0.0f, 1.0f   // Blue (z-axis)
-    };
-
-    GLuint axes_vbo, axes_color_vbo, axes_vao;
+    
     glGenBuffers(1, &axes_vbo);
     glBindBuffer(GL_ARRAY_BUFFER, axes_vbo);
     glBufferData(GL_ARRAY_BUFFER, sizeof(axes_vertices), axes_vertices, GL_STATIC_DRAW);
@@ -1089,12 +1116,16 @@ int main() {
 
 
         // ----- axis ------//
-        /*
-        glUseProgram(shader_programme_axis);
+        
+        glEnable(GL_LINE_SMOOTH);
+        glLineWidth(10.0f);
+
+        glUseProgram(shader_programme);
         // tengelyek kirajz
         glBindVertexArray(axes_vao);
         glDrawArrays(GL_LINES, 0, 6);
-        */
+        
+        glDisable(GL_LINE_SMOOTH);
         // --------------- //
 
         glUseProgram(shader_programme);
@@ -1108,7 +1139,7 @@ int main() {
             for (int i = 0; i <= sor; i++) {
                 glDrawArrays(GL_LINE_STRIP, i * oszlop, oszlop);
             }
-
+            
             glDrawArrays(GL_POINTS, currentPoint, 1);
 
             // POINTS 2
